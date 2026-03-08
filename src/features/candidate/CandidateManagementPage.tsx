@@ -588,7 +588,18 @@ export default function CandidateManagementPage() {
 
                     {/* Report Section */}
                     <div>
-                        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Evaluation Report</h4>
+                        <div className="flex items-center justify-between mb-4">
+                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Evaluation Report</h4>
+                            {!evalLoading && evalReport?.evaluation && (
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={() => window.open(`/evaluation/${selectedCandidate.latest_session_id}`, '_blank')}
+                                >
+                                    View Full Report
+                                </Button>
+                            )}
+                        </div>
                         {evalLoading ? (
                             <div className="flex flex-col items-center justify-center py-12 gap-3">
                                 <div className="w-8 h-8 border-[3px] border-primary/20 border-t-primary rounded-full animate-spin" />
@@ -619,14 +630,16 @@ export default function CandidateManagementPage() {
                                             </p>
 
                                             {(isCompleted || isAbandoned) && (
-                                                <Button
-                                                    variant="primary"
-                                                    size="sm"
-                                                    onClick={() => handleGenerateReport(selectedCandidate.latest_session_id)}
-                                                    loading={triggeringEval}
-                                                >
-                                                    Generate AI Report
-                                                </Button>
+                                                <div className="flex items-center justify-center gap-3">
+                                                    <Button
+                                                        variant="primary"
+                                                        size="sm"
+                                                        onClick={() => handleGenerateReport(selectedCandidate.latest_session_id)}
+                                                        loading={triggeringEval}
+                                                    >
+                                                        Generate AI Report
+                                                    </Button>
+                                                </div>
                                             )}
                                         </>
                                     );
