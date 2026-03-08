@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -42,8 +42,12 @@ export default function CandidateManagementPage() {
     const [triggeringEval, setTriggeringEval] = useState(false);
 
     const [addForm, setAddForm] = useState({ name: '', email: '', resume_url: '' });
-    const [inviteForm, setInviteForm] = useState({ candidate_id: '', assessment_id: '' });
-    const fileRef = useRef<HTMLInputElement>(null);
+    const [inviteForm, setInviteForm] = useState({ candidate_id: '', assessment_id: '', expires_in_hours: 48 });
+
+
+    const [genLinkMode, setGenLinkMode] = useState<'single' | 'bulk'>('single');
+    const [genLinkFile, setGenLinkFile] = useState<File | null>(null);
+    const [generating, setGenerating] = useState(false);
 
     const location = useLocation();
 
@@ -149,43 +153,79 @@ export default function CandidateManagementPage() {
     );
 
     const handleAdd = async () => {
-        await dispatch(addCandidate(addForm));
-        setShowAddModal(false);
-        setAddForm({ name: '', email: '', resume_url: '' });
-    };
-
-    const handleSendInvite = async () => {
         try {
-            await invitationService.createInvitation({
-                candidate_id: inviteForm.candidate_id,
-                assessment_id: inviteForm.assessment_id
-            });
-            setShowInviteModal(false);
-            setInviteForm({ candidate_id: '', assessment_id: '' });
-            dispatch(fetchInvitations());
-        } catch (e) {
-            console.error("Invite failed", e);
+            await dispatch(addCandidate(addForm)).unwrap();
+            setShowAddModal(false);
+            setAddForm({ name: '', email: '', resume_url: '' });
+            dispatch(fetchCandidates()); // fetch so we get the update immediately
+        } catch (error: any) {
+            alert('Failed to add candidate: ' + (typeof error === 'string' ? error : JSON.stringify(error, null, 2)));
         }
     };
 
-    const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+    const handleGenerateLink = async () => {
+        if (!inviteForm.assessment_id) {
+            alert("Please select an assessment.");
+            return;
+        }
 
+        setGenerating(true);
         try {
-            const result = await dispatch(bulkUploadCandidates(file)).unwrap();
-            let message = `Successfully imported ${result.created_count} candidates.`;
-            if (result.errors && result.errors.length > 0) {
-                message += `\n\nErrors encountered:\n- ` + result.errors.join('\n- ');
+            if (inviteForm.candidate_id) {
+                // Sending invite to an existing candidate from the table row
+                await invitationService.createInvitation({
+                    candidate_id: inviteForm.candidate_id,
+                    assessment_id: inviteForm.assessment_id,
+                    expires_in_hours: inviteForm.expires_in_hours
+                });
+            } else if (genLinkMode === 'single') {
+                if (!addForm.name || !addForm.email) {
+                    alert("Please provide candidate name and email.");
+                    setGenerating(false);
+                    return;
+                }
+                const newCandidate = await dispatch(addCandidate(addForm)).unwrap();
+                await invitationService.createInvitation({
+                    candidate_id: newCandidate.id,
+                    assessment_id: inviteForm.assessment_id,
+                    expires_in_hours: inviteForm.expires_in_hours
+                });
+            } else {
+                if (!genLinkFile) {
+                    alert("Please upload a CSV file.");
+                    setGenerating(false);
+                    return;
+                }
+                const oldCandidates = candidates;
+                const result = await dispatch(bulkUploadCandidates(genLinkFile)).unwrap();
+                const nextCandidates = await dispatch(fetchCandidates()).unwrap();
+
+                const newCandidates = nextCandidates.filter(nc => !oldCandidates.find(oc => oc.id === nc.id));
+
+                for (const c of newCandidates) {
+                    await invitationService.createInvitation({
+                        candidate_id: c.id,
+                        assessment_id: inviteForm.assessment_id,
+                        expires_in_hours: inviteForm.expires_in_hours
+                    });
+                }
+
+                let message = `Successfully generated links for ${newCandidates.length} new candidates.`;
+                if (result.errors && result.errors.length > 0) {
+                    message += `\n\nErrors encountered:\n- ` + result.errors.join('\n- ');
+                }
+                if (result.errors && result.errors.length > 0) alert(message);
             }
-            alert(message);
+
             dispatch(fetchCandidates());
+            dispatch(fetchInvitations());
+            setShowInviteModal(false);
         } catch (error: any) {
-            console.error("Bulk upload error:", error);
+            console.error("Generation failed", error);
             const errorMsg = typeof error === 'string' ? error : JSON.stringify(error, null, 2);
-            alert("Bulk upload failed:\n" + errorMsg);
+            alert("Generation failed:\n" + errorMsg);
         } finally {
-            if (e.target) e.target.value = '';
+            setGenerating(false);
         }
     };
 
@@ -198,7 +238,13 @@ export default function CandidateManagementPage() {
 
     const handleDelete = async (candidateId: string) => {
         if (window.confirm('Are you sure you want to delete this candidate? This action cannot be undone.')) {
-            await dispatch(deleteCandidate(candidateId)).unwrap();
+            try {
+                await dispatch(deleteCandidate(candidateId)).unwrap();
+                alert('Candidate deleted successfully.');
+                dispatch(fetchCandidates());
+            } catch (error: any) {
+                alert('Failed to delete candidate: ' + (typeof error === 'string' ? error : error?.message || 'Unknown error'));
+            }
         }
     };
 
@@ -240,30 +286,17 @@ export default function CandidateManagementPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     <button
-                        onClick={() => setShowAddModal(true)}
-                        className="inline-flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all"
-                    >
-                        <span className="material-symbols-outlined text-[18px]">person_add</span>
-                        Add
-                    </button>
-                    <button
-                        onClick={() => fileRef.current?.click()}
-                        className="inline-flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all"
-                    >
-                        <span className="material-symbols-outlined text-[18px]">upload_file</span>
-                        Bulk Upload
-                    </button>
-                    <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleCSVUpload} />
-
-                    <button
                         onClick={() => {
-                            setInviteForm({ candidate_id: '', assessment_id: '' });
+                            setInviteForm((p: any) => ({ ...p, candidate_id: '', assessment_id: '', expires_in_hours: 48 }));
+                            setGenLinkMode('single');
+                            setAddForm({ name: '', email: '', resume_url: '' });
+                            setGenLinkFile(null);
                             setShowInviteModal(true);
                         }}
                         className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all active:scale-[0.98]"
                     >
-                        <span className="material-symbols-outlined text-[18px]">send</span>
-                        Send Invitation
+                        <span className="material-symbols-outlined text-[18px]">link</span>
+                        Generate Link
                     </button>
                 </div>
             </div>
@@ -288,10 +321,10 @@ export default function CandidateManagementPage() {
                     >
                         <option value="All">All Statuses</option>
                         <option value="Not Invited">Pending</option>
-                        <option value="SENT">Sent</option>
-                        <option value="CLICKED">In Progress</option>
-                        <option value="COMPLETED">Completed</option>
-                        <option value="EXPIRED">Expired</option>
+                        <option value="SENT">sent</option>
+                        <option value="CLICKED">clicked</option>
+                        <option value="COMPLETED">completed</option>
+                        <option value="EXPIRED">expired</option>
                     </select>
 
                     <select
@@ -366,9 +399,9 @@ export default function CandidateManagementPage() {
                                         </td>
                                         <td className="px-6 py-4">
                                             {c.latest_status ? (
-                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border}`}>
+                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider border ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border}`}>
                                                     <span className={`size-1.5 rounded-full ${statusConfig.dot}`}></span>
-                                                    {c.latest_status}
+                                                    {c.latest_status.toLowerCase()}
                                                 </span>
                                             ) : (
                                                 <Badge variant="secondary" className="text-[10px]">Not Invited</Badge>
@@ -384,7 +417,7 @@ export default function CandidateManagementPage() {
                                                 </button>
 
                                                 {!c.latest_status && (
-                                                    <button onClick={() => { setInviteForm({ candidate_id: c.id, assessment_id: '' }); setShowInviteModal(true); }} className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all" title="Send Invite">
+                                                    <button onClick={() => { setInviteForm({ candidate_id: c.id, assessment_id: '', expires_in_hours: 48 }); setShowInviteModal(true); }} className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-all" title="Send Invite">
                                                         <span className="material-symbols-outlined text-[18px]">send</span>
                                                     </button>
                                                 )}
@@ -438,27 +471,63 @@ export default function CandidateManagementPage() {
                 </div>
             </Modal>
 
-            {/* Invite Modal */}
-            <Modal isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} title="Send Invitation"
-                footer={<Button variant="primary" onClick={handleSendInvite} disabled={!inviteForm.candidate_id || !inviteForm.assessment_id}>Send Invitation</Button>}
+            {/* Invite / Generate Link Modal */}
+            <Modal isOpen={showInviteModal} onClose={() => setShowInviteModal(false)} title={inviteForm.candidate_id ? "Send Invitation" : "Generate Invitation Link"}
+                footer={<Button variant="primary" onClick={handleGenerateLink} disabled={generating || !inviteForm.assessment_id || (!inviteForm.candidate_id && (genLinkMode === 'single' ? (!addForm.name || !addForm.email) : !genLinkFile))} loading={generating}>
+                    {inviteForm.candidate_id ? "Send Invitation" : "Generate Link(s)"}
+                </Button>}
             >
                 <div className="space-y-5 py-2">
                     <div className="flex flex-col gap-2">
-                        <label className="text-[11px] font-bold uppercase text-slate-400 ml-0.5 tracking-wider">Candidate</label>
-                        <select className="w-full bg-slate-50/80 border border-slate-200 text-sm font-medium rounded-xl p-3 outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/50"
-                            value={inviteForm.candidate_id} onChange={(e) => setInviteForm(p => ({ ...p, candidate_id: e.target.value }))}>
-                            <option value="">Select candidate...</option>
-                            {candidates.map(c => <option key={c.id} value={c.id}>{c.name} ({c.email})</option>)}
-                        </select>
-                    </div>
-                    <div className="flex flex-col gap-2">
                         <label className="text-[11px] font-bold uppercase text-slate-400 ml-0.5 tracking-wider">Assessment</label>
-                        <select className="w-full bg-slate-50/80 border border-slate-200 text-sm font-medium rounded-xl p-3 outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/50"
+                        <select className="w-full bg-slate-50/80 border border-slate-200 text-sm font-medium rounded-xl p-3 outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/50 mb-3"
                             value={inviteForm.assessment_id} onChange={(e) => setInviteForm(p => ({ ...p, assessment_id: e.target.value }))}>
                             <option value="">Select assessment...</option>
                             {assessments.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
                         </select>
+
+                        <label className="text-[11px] font-bold uppercase text-slate-400 ml-0.5 tracking-wider mt-1">Link Expiration (Hours)</label>
+                        <input type="number" className="w-full bg-slate-50/80 border border-slate-200 text-sm font-medium rounded-xl p-3 outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/50"
+                            value={inviteForm.expires_in_hours} onChange={(e) => setInviteForm(p => ({ ...p, expires_in_hours: parseInt(e.target.value) || 48 }))} />
                     </div>
+
+                    {!inviteForm.candidate_id && (
+                        <>
+                            <div className="flex bg-slate-100 p-1 rounded-xl">
+                                <button
+                                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${genLinkMode === 'single' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                    onClick={() => setGenLinkMode('single')}
+                                >
+                                    Single Add
+                                </button>
+                                <button
+                                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${genLinkMode === 'bulk' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                    onClick={() => setGenLinkMode('bulk')}
+                                >
+                                    Bulk Upload
+                                </button>
+                            </div>
+
+                            {genLinkMode === 'single' ? (
+                                <div className="space-y-4">
+                                    <Input label="Candidate Name" placeholder="John Doe" value={addForm.name} onChange={(e: any) => setAddForm(p => ({ ...p, name: e.target.value }))} />
+                                    <Input label="Email Address" type="email" placeholder="john@example.com" value={addForm.email} onChange={(e: any) => setAddForm(p => ({ ...p, email: e.target.value }))} />
+                                    <Input label="Resume URL (Optional)" placeholder="https://linkedin.com/in/johndoe" value={addForm.resume_url} onChange={(e: any) => setAddForm(p => ({ ...p, resume_url: e.target.value }))} />
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    <label className="text-[11px] font-bold uppercase text-slate-400 ml-0.5 tracking-wider">CSV File</label>
+                                    <input
+                                        type="file"
+                                        accept=".csv"
+                                        className="block w-full text-sm text-slate-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border file:border-slate-200 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100 transition-all outline-none"
+                                        onChange={(e) => setGenLinkFile(e.target.files?.[0] || null)}
+                                    />
+                                    <p className="text-[10px] text-slate-400 ml-1">Upload a CSV containing "name" and "email" headers.</p>
+                                </div>
+                            )}
+                        </>
+                    )}
                 </div>
             </Modal>
 
@@ -501,7 +570,7 @@ export default function CandidateManagementPage() {
                                             <div className={`absolute left-0 top-1.5 size-2.5 rounded-full border border-white ring-2 ring-slate-50 ${config.dot}`} />
                                             <div className="flex justify-between items-start">
                                                 <div>
-                                                    <p className="text-xs font-bold text-slate-800">{inv.status.toUpperCase()}</p>
+                                                    <p className="text-xs font-bold text-slate-800">{inv.status.toLowerCase()}</p>
                                                     <p className="text-[10px] text-slate-400 font-medium">{assessments.find(a => a.id === inv.assessment_id)?.title}</p>
                                                 </div>
                                                 <span className="text-[10px] font-medium text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-100">

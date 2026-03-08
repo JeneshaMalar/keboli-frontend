@@ -11,6 +11,7 @@ export interface Candidate {
 export interface CandidateCreate {
     email: string;
     name: string;
+    resume_url?: string;
 }
 
 export const candidateService = {
