@@ -13,6 +13,8 @@ import InterviewWelcomePage from './features/interview/components/InterviewWelco
 import InterviewInstructionsPage from './features/interview/components/InterviewInstructionsPage'
 import InterviewTechCheckPage from './features/interview/components/InterviewTechCheckPage'
 
+import InterviewCompletionPage from './features/interview/components/InterviewCompletionPage'
+
 function App() {
   const location = useLocation()
 
@@ -37,6 +39,7 @@ function App() {
         <Route path="/candidate/instructions" element={<InterviewInstructionsPage />} />
         <Route path="/candidate/tech-check" element={<InterviewTechCheckPage />} />
         <Route path="/candidate/room" element={<CandidateInterviewLive />} />
+        <Route path="/candidate/completion" element={<InterviewCompletionPage />} />
         <Route path="/interview" element={<Navigate to={`/candidate/welcome${location.search}`} replace />} />
         <Route path="*" element={<Navigate to={`/candidate/welcome${location.search}`} replace />} />
       </Routes>

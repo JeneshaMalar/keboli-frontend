@@ -13,17 +13,64 @@ import {
 import '@livekit/components-styles';
 import { Track } from 'livekit-client';
 import api from '../../../lib/axios';
+import Modal from '../../../components/ui/Modal';
+import { useNavigate } from 'react-router-dom';
+import type { Invitation } from '../../candidate/services/invitationService';
 
 
 // --- Styling ---
 const glassmorphism =
-  'bg-white/5 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]';
+  'bg-white/80 backdrop-blur-2xl border border-slate-200 shadow-[0_8px_32px_0_rgba(0,0,0,0.08)]';
 
-const InterviewStage: React.FC<{ onDisconnect: () => void, sessionId: string | null }> = ({ onDisconnect, sessionId }) => {
+const customStyles = `
+  .mirror {
+    transform: scaleX(-1);
+  }
+`;
+
+const RecordingIndicator = () => (
+  <div className="flex items-center gap-2 px-3 py-1.5 bg-rose-500/10 border border-rose-500/20 rounded-full">
+    <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-[0_0_8px_#f43f5e]" />
+    <span className="text-[10px] font-black uppercase tracking-widest text-rose-500">REC</span>
+  </div>
+);
+
+const Timer = ({ durationMinutes }: { durationMinutes: number }) => {
+  const [secondsLeft, setSecondsLeft] = useState(durationMinutes * 60);
+
+  useEffect(() => {
+    if (secondsLeft <= 0) return;
+    const interval = setInterval(() => {
+      setSecondsLeft(prev => prev - 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [secondsLeft]);
+
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    const timeStr = `${h > 0 ? h + ':' : ''}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return timeStr;
+  };
+
+  const isLow = secondsLeft < 300; // 5 minutes
+
+  return (
+    <div className={`flex items-center gap-2 px-4 py-1.5 border rounded-full font-mono text-sm font-bold transition-colors ${isLow ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+      <span className={`material-symbols-outlined text-sm ${isLow ? 'animate-pulse' : 'opacity-60'}`}>schedule</span>
+      {formatTime(secondsLeft)}
+    </div>
+  );
+};
+
+const InterviewStage: React.FC<{ onDisconnect: () => void, sessionId: string | null, invitation: Invitation | null }> = ({ onDisconnect, sessionId, invitation }) => {
   const room = useRoomContext();
   const voiceAssistant = useVoiceAssistant();
+  const [showConfirm, setShowConfirm] = useState(false);
   const isAgentSpeaking = voiceAssistant.state === 'speaking';
   const isListening = voiceAssistant.state === 'listening';
+  const duration = invitation?.assessment?.duration_minutes || 20;
 
   // --- Heartbeat Logic ---
   useEffect(() => {
@@ -42,186 +89,206 @@ const InterviewStage: React.FC<{ onDisconnect: () => void, sessionId: string | n
 
   // Get the agent's video track (BeyondPresence avatar)
   const tracks = useTracks(
-    [{ source: Track.Source.Camera, withPlaceholder: false }],
+    [
+      { source: Track.Source.Camera, withPlaceholder: false }
+    ],
     { onlySubscribed: true }
   );
+
+  // Get local camera track
+  const localTracks = useTracks(
+    [{ source: Track.Source.Camera, withPlaceholder: false }],
+    { onlySubscribed: false }
+  ).filter(t => t.participant.identity === room.localParticipant.identity);
+
+  const localVideoTrack = localTracks[0] as any;
 
   // Find the agent's video track (not the candidate's)
   const agentVideoTrack = tracks.find(
     (t) => t.participant.identity !== room.localParticipant.identity
-  ) as any; // Cast as any or specific type to bypass placeholder mismatch
+  ) as any;
 
   const segments = useTranscriptions();
 
-  // Get the latest transcription from anyone (agent or candidate)
-  // or specifically the local participant if we want to show what the user is saying
-  const lastSegment = segments[segments.length - 1];
-  const activeTranscript = lastSegment?.text || (isListening ? 'Listening...' : 'Waiting...');
+  // Robust transcript filtering: Agent is usually any identity that is NOT the local one
+  const agentTranscripts = segments.filter(s => {
+    const p = (s as any).participant;
+    return p && p.identity !== room.localParticipant.identity;
+  });
+
+  const candidateTranscripts = segments.filter(s => {
+    const p = (s as any).participant;
+    return p && p.identity === room.localParticipant.identity;
+  });
+
+  // Get the actual text content from segments
+  const lastAgentText = agentTranscripts.length > 0
+    ? agentTranscripts[agentTranscripts.length - 1].text
+    : (isAgentSpeaking ? 'Interviewer is speaking...' : 'Interviewer is ready...');
+
+  const lastCandidateText = candidateTranscripts.length > 0
+    ? candidateTranscripts[candidateTranscripts.length - 1].text
+    : (isListening ? 'Listening to your response...' : 'Waiting for prompt...');
 
   return (
     <>
+      <style>{customStyles}</style>
       {/* Glassy Header */}
       <header
-        className={`fixed top-6 left-1/2 -translate-x-1/2 w-[90%] max-w-5xl z-50 p-4 rounded-2xl flex justify-between items-center ${glassmorphism}`}
+        className={`fixed top-6 left-1/2 -translate-x-1/2 w-[90%] max-w-7xl z-50 p-3 rounded-2xl flex justify-between items-center ${glassmorphism}`}
       >
-        <div className="flex items-center gap-3">
-          <div className="relative flex items-center justify-center">
-            <div
-              className={`w-3 h-3 rounded-full ${room.state === 'connected'
-                ? 'bg-emerald-500 shadow-[0_0_15px_#10b981]'
-                : 'bg-rose-500'
-                }`}
-            />
-            {room.state === 'connected' && (
-              <div className="absolute w-3 h-3 rounded-full bg-emerald-500 animate-ping" />
-            )}
-          </div>
-          <span className="text-xs font-bold tracking-[0.2em] uppercase opacity-60">
-            {room.state === 'connected' ? 'Live Assessment' : 'Connecting...'}
-          </span>
+        <div className="flex items-center gap-4">
+          <RecordingIndicator />
+          <div className="h-6 w-px bg-slate-200 mx-2" />
+          <Timer durationMinutes={duration} />
+          <div className="h-6 w-px bg-slate-200 mx-2" />
+          <button
+            onClick={() => setShowConfirm(true)}
+            className="px-6 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs transition-all shadow-lg shadow-blue-600/20 active:scale-95 flex items-center gap-2"
+          >
+            Submit Interview
+            <span className="material-symbols-outlined text-sm">check_circle</span>
+          </button>
         </div>
 
-        <div className="flex items-center gap-4">
-          {/* Agent state badge */}
-          <span className="text-[10px] uppercase tracking-widest font-bold text-blue-400 opacity-70">
-            {voiceAssistant.state}
-          </span>
-          <button
-            onClick={onDisconnect}
-            className="px-6 py-2 rounded-lg bg-rose-500/10 border border-rose-500/50 hover:bg-rose-500 transition-all font-bold text-sm"
-          >
-            End Session
-          </button>
+        <div className="flex items-center gap-4 px-4">
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col items-end">
+              <span className="text-[8px] uppercase tracking-[0.2em] font-black text-slate-400">Secure Session</span>
+              <span className="text-[10px] font-mono text-slate-600">{sessionId?.slice(0, 8)}</span>
+            </div>
+            <div className={`size-2.5 rounded-full ${room.state === 'connected' ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-rose-500 shadow-[0_0_10px_#f43f5e]'}`} />
+          </div>
         </div>
       </header>
 
+      {/* Confirmation Modal */}
+      <Modal
+        isOpen={showConfirm}
+        onClose={() => setShowConfirm(false)}
+        title="Finalize Interview?"
+        footer={
+          <div className="flex gap-4 w-full">
+            <button
+              onClick={() => setShowConfirm(false)}
+              className="flex-1 py-3 px-6 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all"
+            >
+              Review Work
+            </button>
+            <button
+              onClick={onDisconnect}
+              className="flex-1 py-3 px-6 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+            >
+              Confirm & Submit
+            </button>
+          </div>
+        }
+      >
+        <div className="p-2">
+          <p className="text-slate-600 font-medium leading-relaxed">
+            Are you sure you want to end your assessment now? This action is irreversible and your current progress will be submitted for evaluation.
+          </p>
+        </div>
+      </Modal>
+
       {/* Main Stage */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full max-w-6xl mt-20">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 w-full max-w-7xl mt-28 px-6">
         {/* Interviewer (Agent) Side */}
-        <section className="flex flex-col items-center gap-6">
-          <div className="relative group">
+        <section className="flex flex-col items-center gap-8">
+          <div className="relative w-full aspect-square md:aspect-auto md:h-[480px] rounded-[3rem] overflow-hidden border border-slate-200 bg-white shadow-xl flex items-center justify-center p-8 group">
             {/* Ambient Aura */}
             <div
-              className={`absolute -inset-8 rounded-full bg-blue-500/20 blur-3xl transition-opacity duration-1000 ${isAgentSpeaking ? 'opacity-100 animate-pulse' : 'opacity-0'
-                }`}
+              className={`absolute inset-0 bg-blue-500/5 blur-3xl transition-opacity duration-1000 ${isAgentSpeaking ? 'opacity-100' : 'opacity-0'}`}
             />
 
             {/* Avatar Video or Placeholder */}
             <div
-              className={`relative w-48 h-48 md:w-80 md:h-80 rounded-full p-1 overflow-hidden transition-all duration-500 ${isAgentSpeaking
-                ? 'scale-105 shadow-[0_0_60px_rgba(59,130,246,0.3)]'
-                : 'grayscale opacity-60 scale-95'
+              className={`relative size-64 md:size-80 rounded-full p-1 transition-all duration-500 ${isAgentSpeaking
+                ? 'scale-105 shadow-[0_0_80px_rgba(59,130,246,0.2)]'
+                : 'opacity-60 scale-95'
                 }`}
             >
-              <div className="absolute inset-0 bg-gradient-to-tr from-blue-500 to-cyan-400 rotate-45" />
-              <div className="relative w-full h-full rounded-full overflow-hidden border-4 border-[#020617] bg-slate-900 flex items-center justify-center">
+              <div className="absolute inset-0 bg-gradient-to-tr from-blue-500 to-cyan-400 rotate-45 rounded-full" />
+              <div className="relative w-full h-full rounded-full overflow-hidden border-8 border-white bg-slate-50 flex items-center justify-center">
                 {agentVideoTrack ? (
                   <VideoTrack
                     trackRef={agentVideoTrack}
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    className="w-1/2 h-1/2 text-blue-400 opacity-80"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                  >
-                    <path
-                      d="M12 8V4m0 0H8m4 0h4m-9 4h10c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2v-8c0-1.1.9-2 2-2z"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <circle cx="9" cy="13" r="1" fill="currentColor" />
-                    <circle cx="15" cy="13" r="1" fill="currentColor" />
-                  </svg>
+                  <span className="material-symbols-outlined text-8xl text-blue-500/20">smart_toy</span>
                 )}
               </div>
             </div>
 
-            {/* Speaking Indicator */}
-            <div
-              className={`absolute -bottom-2 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-blue-500 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${isAgentSpeaking ? 'opacity-100 scale-100' : 'opacity-0 scale-50'
-                }`}
-            >
-              Interviewer
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 w-full px-10">
+              <div className="px-4 py-1 rounded-full bg-blue-600 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-blue-600/20">AI Interviewer</div>
+
+              {/* Agent Visualizer */}
+              <div className="w-full flex justify-center">
+                <BarVisualizer
+                  state={voiceAssistant.state}
+                  barCount={24}
+                  trackRef={voiceAssistant.audioTrack}
+                  className="h-10 w-full max-w-[200px]"
+                />
+              </div>
             </div>
           </div>
 
-          {/* Agent Audio Visualizer */}
-          <div
-            className={`w-full max-w-md p-6 rounded-2xl min-h-[140px] transition-all duration-500 ${glassmorphism} ${isAgentSpeaking ? 'border-blue-400/30' : 'opacity-40'
-              }`}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-              <span className="text-[10px] uppercase tracking-widest font-bold text-blue-400">
-                Response Console
-              </span>
+          {/* Interviewer Transcript Box */}
+          <div className={`w-full p-8 rounded-[2.5rem] min-h-[160px] transition-all duration-500 ${glassmorphism}`}>
+            <div className="flex items-center gap-2 mb-4 opacity-40">
+              <span className="material-symbols-outlined text-sm text-blue-600">forum</span>
+              <span className="text-[10px] uppercase tracking-widest font-black text-slate-900">Interviewer Feed</span>
             </div>
-            <BarVisualizer
-              state={voiceAssistant.state}
-              barCount={7}
-              trackRef={voiceAssistant.audioTrack}
-              className="h-16"
-            />
+            <p className="text-xl font-bold leading-relaxed text-slate-800 line-clamp-3 italic">
+              "{lastAgentText}"
+            </p>
           </div>
         </section>
 
-        {/* Candidate Side */}
-        <section className="flex flex-col items-center gap-6">
-          <div className="relative">
-            <div
-              className={`absolute -inset-8 rounded-full bg-indigo-500/20 blur-3xl transition-opacity duration-1000 ${isListening ? 'opacity-100 animate-pulse' : 'opacity-0'
-                }`}
-            />
+        {/* Candidate (Self) Side */}
+        <section className="flex flex-col items-center gap-8">
+          <div className="relative w-full aspect-square md:aspect-auto md:h-[480px] rounded-[3rem] overflow-hidden border border-slate-200 bg-white shadow-xl flex items-center justify-center group">
+            {/* Candidate Video Feed - Now correctly placed in Candidate Space */}
+            <div className="absolute inset-0 z-0">
+              {localVideoTrack ? (
+                <VideoTrack trackRef={localVideoTrack} className="w-full h-full object-cover mirror" />
+              ) : (
+                <div className="w-full h-full bg-slate-900 flex flex-col items-center justify-center text-white/20 gap-4">
+                  <div className="size-20 rounded-full border-4 border-dashed border-white/10 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-4xl">videocam_off</span>
+                  </div>
+                  <p className="text-xs font-black uppercase tracking-widest">Camera Feed Inactive</p>
+                </div>
+              )}
+            </div>
 
-            <div
-              className={`relative w-48 h-48 md:w-80 md:h-80 rounded-full p-1 overflow-hidden transition-all duration-500 ${isListening
-                ? 'scale-105 shadow-[0_0_60px_rgba(99,102,241,0.3)]'
-                : 'grayscale opacity-60 scale-95'
-                }`}
-            >
-              <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500 to-purple-400 rotate-45" />
-              <div className="relative w-full h-full rounded-full overflow-hidden border-4 border-[#020617] bg-slate-900 flex items-center justify-center">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  className="w-1/2 h-1/2 text-indigo-400 opacity-80"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                >
-                  <path
-                    d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <circle cx="12" cy="7" r="4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+            {/* Candidate Activity Overlay */}
+            <div className="absolute top-6 right-6 z-10 flex flex-col items-end gap-3">
+              <div className={`px-4 py-1.5 rounded-full backdrop-blur-md text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all ${isListening ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/90 text-slate-400 border border-slate-200'}`}>
+                <span className={`material-symbols-outlined text-xs ${isListening ? 'animate-pulse' : 'opacity-40'}`}>
+                  {isListening ? 'mic' : 'mic_none'}
+                </span>
+                {isListening ? 'Listening' : 'Ready'}
               </div>
             </div>
 
-            <div
-              className={`absolute -bottom-2 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-indigo-500 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${isListening ? 'opacity-100 scale-100' : 'opacity-0 scale-50'
-                }`}
-            >
-              Candidate
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 w-full px-10 z-10 text-center">
+              <div className="px-4 py-1 rounded-full bg-white/90 backdrop-blur-md border border-slate-200 text-slate-400 text-[10px] font-black uppercase tracking-widest">Candidate Feed</div>
+              {isListening && <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tighter animate-pulse">Audio Input Active</p>}
             </div>
           </div>
 
-          <div
-            className={`w-full max-w-md p-6 rounded-2xl min-h-[140px] transition-all duration-500 ${glassmorphism} ${isListening ? 'border-indigo-400/30' : 'opacity-40'
-              }`}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-              <span className="text-[10px] uppercase tracking-widest font-bold text-indigo-400">
-                Transcript Feed
-              </span>
+          {/* Candidate Transcript Box */}
+          <div className={`w-full p-8 rounded-[2.5rem] min-h-[160px] transition-all duration-500 ${glassmorphism}`}>
+            <div className="flex items-center gap-2 mb-4 opacity-40">
+              <span className="material-symbols-outlined text-sm text-indigo-600">record_voice_over</span>
+              <span className="text-[10px] uppercase tracking-widest font-black text-slate-900">Your Voice Feed</span>
             </div>
-            <p className="text-lg font-medium leading-relaxed text-slate-200">
-              {activeTranscript}
+            <p className="text-xl font-bold leading-relaxed text-slate-800 line-clamp-3">
+              {lastCandidateText}
             </p>
           </div>
         </section>
@@ -238,6 +305,7 @@ const InterviewStage: React.FC<{ onDisconnect: () => void, sessionId: string | n
 // ---------------------------------------------------------
 const CandidateInterviewLive: React.FC = () => {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const token = searchParams.get('token') || '';
 
   const [livekitToken, setLivekitToken] = useState<string | null>(null);
@@ -246,6 +314,7 @@ const CandidateInterviewLive: React.FC = () => {
   const [clientError, setClientError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [invitation, setInvitation] = useState<Invitation | null>(null);
 
   const connect = useCallback(async () => {
     if (!token) {
@@ -256,7 +325,11 @@ const CandidateInterviewLive: React.FC = () => {
     setClientError(null);
 
     try {
-      // Call our backend to validate & get a LiveKit token
+      // Validate invitation and get duration
+      const invResponse = await api.get(`/invitation/validate/${token}`);
+      setInvitation(invResponse.data);
+
+      // Call our backend to get a LiveKit token
       const response = await api.post(`/livekit/token`, null, {
         params: { invitation_token: token },
       });
@@ -275,7 +348,7 @@ const CandidateInterviewLive: React.FC = () => {
     if (sessionId) {
       try {
         await api.post(`/livekit/session/${sessionId}/complete`, null, {
-          params: { auto_evaluate: false }
+          params: { auto_evaluate: true }
         });
       } catch (err) {
         console.error('Failed to complete session on disconnect:', err);
@@ -285,35 +358,43 @@ const CandidateInterviewLive: React.FC = () => {
     setLivekitUrl('');
     setSessionId(null);
     setIsConnected(false);
-  }, [sessionId]);
+    navigate(`/candidate/completion?token=${token}`);
+  }, [sessionId, navigate, token]);
+
+  // --- Auto-connect on mount ---
+  useEffect(() => {
+    if (token && !isConnected && !isValidating) {
+      connect();
+    }
+  }, [token, isConnected, isValidating, connect]);
 
   // --- Not yet connected: show the start screen ---
   if (!isConnected || !livekitToken) {
     return (
-      <div className="min-h-screen bg-[#020617] text-slate-100 p-4 md:p-8 flex flex-col items-center justify-center font-sans">
+      <div className="min-h-screen bg-slate-50 text-slate-900 p-4 md:p-8 flex flex-col items-center justify-center font-sans">
         {/* Dynamic Background */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 rounded-full blur-[120px]" />
-          <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/10 rounded-full blur-[120px]" />
+          <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/5 rounded-full blur-[120px]" />
+          <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/5 rounded-full blur-[120px]" />
         </div>
 
         <header
           className={`fixed top-6 left-1/2 -translate-x-1/2 w-[90%] max-w-5xl z-50 p-4 rounded-2xl flex justify-between items-center ${glassmorphism}`}
         >
           <div className="flex items-center gap-3">
-            <div className="w-3 h-3 rounded-full bg-rose-500" />
-            <span className="text-xs font-bold tracking-[0.2em] uppercase opacity-60">
-              Service Disconnected
+            <div className="size-2.5 rounded-full bg-rose-500 shadow-[0_0_10px_#f43f5e]" />
+            <span className="text-xs font-black tracking-widest uppercase text-slate-400">
+              Disconnected
             </span>
           </div>
 
           <button
             onClick={connect}
             disabled={isValidating || !token}
-            className={`px-6 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition-all font-bold text-sm ${isValidating || !token ? 'opacity-50 cursor-not-allowed' : ''
+            className={`px-6 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-all font-black text-sm shadow-lg shadow-blue-600/20 ${isValidating || !token ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'
               }`}
           >
-            {isValidating ? 'Connecting...' : 'Start Session'}
+            {isValidating ? 'Establishing Feed...' : 'Reconnect System'}
           </button>
         </header>
 
@@ -328,11 +409,11 @@ const CandidateInterviewLive: React.FC = () => {
 
   // --- Connected: render the LiveKit room ---
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 p-4 md:p-8 flex flex-col items-center justify-center font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 p-4 md:p-8 flex flex-col items-center justify-center font-sans overflow-hidden">
       {/* Dynamic Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/10 rounded-full blur-[120px]" />
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/5 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/5 rounded-full blur-[120px]" />
       </div>
 
       <LiveKitRoom
@@ -340,11 +421,11 @@ const CandidateInterviewLive: React.FC = () => {
         token={livekitToken}
         connect={true}
         audio={true}
-        video={false}
+        video={true}
         onDisconnected={disconnect}
-        className="w-full flex flex-col items-center"
+        className="w-full h-full flex flex-col items-center"
       >
-        <InterviewStage onDisconnect={disconnect} sessionId={sessionId} />
+        <InterviewStage onDisconnect={disconnect} sessionId={sessionId} invitation={invitation} />
       </LiveKitRoom>
     </div>
   );
