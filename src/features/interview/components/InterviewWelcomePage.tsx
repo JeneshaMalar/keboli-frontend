@@ -72,22 +72,7 @@ const InterviewWelcomePage: React.FC = () => {
     return (
         <div className="relative flex h-auto min-h-screen w-full flex-col font-sans bg-slate-50 text-slate-900">
             <div className="layout-container flex h-full grow flex-col">
-                {/* Header */}
-                <header className="flex items-center justify-between whitespace-nowrap border-b border-slate-200 px-6 py-4 md:px-10 bg-white/80 backdrop-blur-md sticky top-0 z-50">
-                    <div className="flex items-center gap-3 text-slate-900">
-                        <div className="flex items-center justify-center size-8 bg-blue-600 rounded-lg text-white">
-                            <span className="material-symbols-outlined text-xl font-bold">psychology</span>
-                        </div>
-                        <h2 className="text-lg font-bold leading-tight tracking-tight">AI Interview Pro</h2>
-                    </div>
-                    <div className="flex flex-1 justify-end gap-4 items-center">
-                        <span className="text-sm font-semibold text-slate-600 hidden sm:block">{candidateName}</span>
-                        <div
-                            className="bg-slate-200 bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border border-slate-300"
-                            style={{ backgroundImage: `url("https://ui-avatars.com/api/?name=${encodeURIComponent(candidateName)}&background=197fe6&color=fff")` }}
-                        ></div>
-                    </div>
-                </header>
+
 
                 {/* Main Content Area */}
                 <main className="flex-1 flex flex-col items-center justify-center p-6 md:p-10">
@@ -180,17 +165,7 @@ const InterviewWelcomePage: React.FC = () => {
                     </div>
                 </main>
 
-                {/* Footer */}
-                <footer className="footer-area px-6 py-10 bg-white border-t border-slate-100">
-                    <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-                        <div className="flex flex-wrap items-center justify-center gap-8">
-                            <a className="text-slate-400 hover:text-blue-600 text-xs font-bold tracking-widest uppercase transition-colors" href="#">Privacy</a>
-                            <a className="text-slate-400 hover:text-blue-600 text-xs font-bold tracking-widest uppercase transition-colors" href="#">Terms</a>
-                            <a className="text-slate-400 hover:text-blue-600 text-xs font-bold tracking-widest uppercase transition-colors" href="#">Support</a>
-                        </div>
-                        <p className="text-slate-300 text-xs font-bold tracking-wider uppercase">© 2024 AI Interview Pro. Platform</p>
-                    </div>
-                </footer>
+
             </div>
         </div>
     );
