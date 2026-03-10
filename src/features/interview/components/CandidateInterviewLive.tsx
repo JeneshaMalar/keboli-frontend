@@ -35,16 +35,19 @@ const RecordingIndicator = () => (
   </div>
 );
 
-const Timer = ({ durationMinutes }: { durationMinutes: number }) => {
+const Timer = ({ durationMinutes, onTimeUp }: { durationMinutes: number; onTimeUp: () => void }) => {
   const [secondsLeft, setSecondsLeft] = useState(durationMinutes * 60);
 
   useEffect(() => {
-    if (secondsLeft <= 0) return;
+    if (secondsLeft <= 0) {
+      onTimeUp();
+      return;
+    }
     const interval = setInterval(() => {
       setSecondsLeft(prev => prev - 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, [secondsLeft]);
+  }, [secondsLeft, onTimeUp]);
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -57,9 +60,11 @@ const Timer = ({ durationMinutes }: { durationMinutes: number }) => {
   const isLow = secondsLeft < 300; // 5 minutes
 
   return (
-    <div className={`flex items-center gap-2 px-4 py-1.5 border rounded-full font-mono text-sm font-bold transition-colors ${isLow ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
-      <span className={`material-symbols-outlined text-sm ${isLow ? 'animate-pulse' : 'opacity-60'}`}>schedule</span>
-      {formatTime(secondsLeft)}
+    <div className={`flex items-center gap-2 px-4 py-1.5 border rounded-full font-mono text-sm font-bold transition-colors ${secondsLeft <= 0 ? 'bg-rose-600 border-rose-600 text-white animate-pulse' : isLow ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+      <span className={`material-symbols-outlined text-sm ${isLow || secondsLeft <= 0 ? 'animate-pulse' : 'opacity-60'}`}>
+        {secondsLeft <= 0 ? 'timer_off' : 'schedule'}
+      </span>
+      {secondsLeft <= 0 ? '00:00' : formatTime(secondsLeft)}
     </div>
   );
 };
@@ -68,9 +73,57 @@ const InterviewStage: React.FC<{ onDisconnect: () => void, sessionId: string | n
   const room = useRoomContext();
   const voiceAssistant = useVoiceAssistant();
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isTimeUp, setIsTimeUp] = useState(false);
+  const [bufferLeft, setBufferLeft] = useState(120); // 2 minutes buffer
+
   const isAgentSpeaking = voiceAssistant.state === 'speaking';
   const isListening = voiceAssistant.state === 'listening';
   const duration = invitation?.assessment?.duration_minutes || 20;
+
+  const [dbTranscripts, setDbTranscripts] = useState<any[]>([]);
+
+  // --- Transcript Polling Logic ---
+  // Since real-time segments might not be published by the agent, 
+  // we poll the database which the LLM adapter updates manually.
+  useEffect(() => {
+    if (!sessionId || room.state !== 'connected') return;
+
+    const fetchTranscripts = async () => {
+      try {
+        const response = await api.get(`/evaluation/transcript/${sessionId}`);
+        if (Array.isArray(response.data)) {
+          setDbTranscripts(response.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch transcripts from DB:', err);
+      }
+    };
+
+    fetchTranscripts(); // initial fetch
+    const interval = setInterval(fetchTranscripts, 3000); // poll every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [sessionId, room.state]);
+
+  // --- Auto-submit Logic ---
+  useEffect(() => {
+    if (!isTimeUp) return;
+
+    const someoneSpeaking = isAgentSpeaking || isListening;
+
+    // If no one is speaking OR the buffer is completely exhausted, submit immediately
+    if (!someoneSpeaking || bufferLeft <= 0) {
+      onDisconnect();
+      return;
+    }
+
+    // Otherwise, decrement buffer while someone is speaking
+    const timer = setInterval(() => {
+      setBufferLeft(prev => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isTimeUp, isAgentSpeaking, isListening, bufferLeft, onDisconnect]);
 
   // --- Heartbeat Logic ---
   useEffect(() => {
@@ -113,22 +166,31 @@ const InterviewStage: React.FC<{ onDisconnect: () => void, sessionId: string | n
   // Robust transcript filtering: Agent is usually any identity that is NOT the local one
   const agentTranscripts = segments.filter(s => {
     const p = (s as any).participant;
-    return p && p.identity !== room.localParticipant.identity;
+    const pId = typeof p === 'string' ? p : p?.identity;
+    return pId && pId !== room.localParticipant.identity;
   });
 
   const candidateTranscripts = segments.filter(s => {
     const p = (s as any).participant;
-    return p && p.identity === room.localParticipant.identity;
+    const pId = typeof p === 'string' ? p : p?.identity;
+    return pId && pId === room.localParticipant.identity;
   });
 
-  // Get the actual text content from segments
+  // Get the actual text content from segments OR DB fallback
+  const agentDbTranscripts = dbTranscripts.filter(t => t.role?.toLowerCase() === 'interviewer');
+  const candidateDbTranscripts = dbTranscripts.filter(t => t.role?.toLowerCase() === 'candidate');
+
   const lastAgentText = agentTranscripts.length > 0
     ? agentTranscripts[agentTranscripts.length - 1].text
-    : (isAgentSpeaking ? 'Interviewer is speaking...' : 'Interviewer is ready...');
+    : (agentDbTranscripts.length > 0
+      ? agentDbTranscripts[agentDbTranscripts.length - 1].content || agentDbTranscripts[agentDbTranscripts.length - 1].text
+      : (isAgentSpeaking ? 'Interviewer is speaking...' : 'Interviewer is ready...'));
 
   const lastCandidateText = candidateTranscripts.length > 0
     ? candidateTranscripts[candidateTranscripts.length - 1].text
-    : (isListening ? 'Listening to your response...' : 'Waiting for prompt...');
+    : (candidateDbTranscripts.length > 0
+      ? candidateDbTranscripts[candidateDbTranscripts.length - 1].content || candidateDbTranscripts[candidateDbTranscripts.length - 1].text
+      : (isListening ? 'Listening to your response...' : 'Waiting for prompt...'));
 
   return (
     <>
@@ -140,8 +202,14 @@ const InterviewStage: React.FC<{ onDisconnect: () => void, sessionId: string | n
         <div className="flex items-center gap-4">
           <RecordingIndicator />
           <div className="h-6 w-px bg-slate-200 mx-2" />
-          <Timer durationMinutes={duration} />
+          <Timer durationMinutes={duration} onTimeUp={() => setIsTimeUp(true)} />
           <div className="h-6 w-px bg-slate-200 mx-2" />
+          {isTimeUp && (
+            <div className="px-4 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 animate-pulse">
+              <span className="material-symbols-outlined text-xs">auto_mode</span>
+              Auto-Submitting in {Math.floor(bufferLeft / 60)}:{(bufferLeft % 60).toString().padStart(2, '0')}
+            </div>
+          )}
           <button
             onClick={() => setShowConfirm(true)}
             className="px-6 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs transition-all shadow-lg shadow-blue-600/20 active:scale-95 flex items-center gap-2"

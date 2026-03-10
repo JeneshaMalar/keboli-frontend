@@ -5,7 +5,7 @@ const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'space_dashboard', path: '/' },
     { id: 'assessments', label: 'Assessments', icon: 'assignment', path: '/assessments' },
     { id: 'candidates', label: 'Candidates', icon: 'group', path: '/candidates' },
-    { id: 'interviews', label: 'Interviews', icon: 'videocam', path: '/interviews' },
+   
 ]
 
 export default function Sidebar() {
@@ -48,7 +48,7 @@ export default function Sidebar() {
                     )
                 })}
 
-                <div className="pt-6 mt-6 border-t border-slate-100">
+                {/* <div className="pt-6 mt-6 border-t border-slate-100">
                     <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-[0.15em] px-4 mb-3">System</p>
                     <Link
                         to="/settings"
@@ -57,7 +57,7 @@ export default function Sidebar() {
                         <span className="material-symbols-outlined text-[20px] text-slate-400 group-hover:text-slate-600">settings</span>
                         <span className="font-semibold text-sm">Settings</span>
                     </Link>
-                </div>
+                </div> */}
             </nav>
 
             {/* User Profile */}
