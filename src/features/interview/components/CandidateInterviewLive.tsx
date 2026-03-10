@@ -80,6 +80,31 @@ const InterviewStage: React.FC<{ onDisconnect: () => void, sessionId: string | n
   const isListening = voiceAssistant.state === 'listening';
   const duration = invitation?.assessment?.duration_minutes || 20;
 
+  const [dbTranscripts, setDbTranscripts] = useState<any[]>([]);
+
+  // --- Transcript Polling Logic ---
+  // Since real-time segments might not be published by the agent, 
+  // we poll the database which the LLM adapter updates manually.
+  useEffect(() => {
+    if (!sessionId || room.state !== 'connected') return;
+
+    const fetchTranscripts = async () => {
+      try {
+        const response = await api.get(`/evaluation/transcript/${sessionId}`);
+        if (Array.isArray(response.data)) {
+          setDbTranscripts(response.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch transcripts from DB:', err);
+      }
+    };
+
+    fetchTranscripts(); // initial fetch
+    const interval = setInterval(fetchTranscripts, 3000); // poll every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [sessionId, room.state]);
+
   // --- Auto-submit Logic ---
   useEffect(() => {
     if (!isTimeUp) return;
@@ -141,22 +166,31 @@ const InterviewStage: React.FC<{ onDisconnect: () => void, sessionId: string | n
   // Robust transcript filtering: Agent is usually any identity that is NOT the local one
   const agentTranscripts = segments.filter(s => {
     const p = (s as any).participant;
-    return p && p.identity !== room.localParticipant.identity;
+    const pId = typeof p === 'string' ? p : p?.identity;
+    return pId && pId !== room.localParticipant.identity;
   });
 
   const candidateTranscripts = segments.filter(s => {
     const p = (s as any).participant;
-    return p && p.identity === room.localParticipant.identity;
+    const pId = typeof p === 'string' ? p : p?.identity;
+    return pId && pId === room.localParticipant.identity;
   });
 
-  // Get the actual text content from segments
+  // Get the actual text content from segments OR DB fallback
+  const agentDbTranscripts = dbTranscripts.filter(t => t.role?.toLowerCase() === 'interviewer');
+  const candidateDbTranscripts = dbTranscripts.filter(t => t.role?.toLowerCase() === 'candidate');
+
   const lastAgentText = agentTranscripts.length > 0
     ? agentTranscripts[agentTranscripts.length - 1].text
-    : (isAgentSpeaking ? 'Interviewer is speaking...' : 'Interviewer is ready...');
+    : (agentDbTranscripts.length > 0
+      ? agentDbTranscripts[agentDbTranscripts.length - 1].content || agentDbTranscripts[agentDbTranscripts.length - 1].text
+      : (isAgentSpeaking ? 'Interviewer is speaking...' : 'Interviewer is ready...'));
 
   const lastCandidateText = candidateTranscripts.length > 0
     ? candidateTranscripts[candidateTranscripts.length - 1].text
-    : (isListening ? 'Listening to your response...' : 'Waiting for prompt...');
+    : (candidateDbTranscripts.length > 0
+      ? candidateDbTranscripts[candidateDbTranscripts.length - 1].content || candidateDbTranscripts[candidateDbTranscripts.length - 1].text
+      : (isListening ? 'Listening to your response...' : 'Waiting for prompt...'));
 
   return (
     <>
