@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import type { AppDispatch, RootState } from '../../app/store';
 import { fetchCandidates, fetchInvitations } from '../candidate/slices/candidateSlice';
 import { fetchAssessments } from '../assessment/slices/assessmentSlice';
-import Badge from '../../components/ui/Badge';
+// import Badge from '../../components/ui/Badge';
 import {
     AreaChart, Area, PieChart, Pie, Cell,
     ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid
@@ -90,7 +90,7 @@ function DonutLabel({ viewBox, value, label }: any) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
     const dispatch = useDispatch<AppDispatch>();
-    const { candidates, invitations, loading } = useSelector((state: RootState) => state.candidate);
+    const { candidates, invitations} = useSelector((state: RootState) => state.candidate);
     const { assessments } = useSelector((state: RootState) => state.assessment);
     const [activityTab, setActivityTab] = useState<'all' | 'completed' | 'pending'>('all');
 

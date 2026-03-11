@@ -65,7 +65,7 @@ const InterviewWelcomePage: React.FC = () => {
         );
     }
 
-    const candidateName = invitation?.candidate?.name || 'Candidate';
+    // const candidateName = invitation?.candidate?.name || 'Candidate';
     const assessmentTitle = invitation?.assessment?.title || 'Technical Assessment';
     const duration = invitation?.assessment?.duration_minutes || 45;
 
