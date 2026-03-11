@@ -27,7 +27,7 @@ function parseJobDescription(jd: string): Array<{ heading?: string; items: strin
   const sections: Array<{ heading?: string; items: string[] }> = [];
   let current: { heading?: string; items: string[] } = { items: [] };
 
-  const headingRe = /^(.{3,60}):?\s*$/;
+  // const headingRe = /^(.{3,60}):?\s*$/;
   const bulletRe = /^[-*•]\s+(.+)$/;
   const numberedRe = /^\d+[.)]\s+(.+)$/;
 
@@ -213,7 +213,7 @@ function SkillGraphViewer({ skillGraph }: { skillGraph: unknown }) {
                 const weight = getWeightPercent(skill);
                 const name = getSkillName(skill);
                 const desc = getSkillDescription(skill);
-                const { bg, text, border } = colorFromString(category);
+                const { text } = colorFromString(category);
 
                 // Collect any extra fields to display as subtle tags
                 const knownKeys = new Set(['name', 'title', 'skill', 'label', 'category', 'type',
