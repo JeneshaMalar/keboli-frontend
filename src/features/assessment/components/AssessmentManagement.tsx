@@ -124,7 +124,6 @@ const AssessmentManagement: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-5">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Assessments</h1>
@@ -139,7 +138,6 @@ const AssessmentManagement: React.FC = () => {
         </button>
       </div>
 
-      {/* Filter Bar */}
       <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
         <div className="relative flex-1 min-w-[280px] group">
           <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg group-focus-within:text-primary transition-colors">search</span>
@@ -189,7 +187,6 @@ const AssessmentManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Content */}
       <div className="relative">
         {loading && assessments.length === 0 ? (
           <div className="bg-white border border-slate-200/80 rounded-2xl p-24 text-center shadow-sm">
