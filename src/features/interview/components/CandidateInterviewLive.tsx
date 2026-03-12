@@ -5,16 +5,12 @@ import {
   useRoomContext, VideoTrack, useTracks, useTranscriptions,
 } from '@livekit/components-react';
 import '@livekit/components-styles';
-import { Track } from 'livekit-client';
+import { Track, RoomEvent } from 'livekit-client';
 import api from '../../../lib/axios';
 import Modal from '../../../components/ui/Modal';
 import type { Invitation } from '../../candidate/services/invitationService';
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   DESIGN DIRECTION: "Editorial Studio" — warm off-white canvas, ink-black type,
-   a single deep-violet accent (#5b3cf5), geometric precision, generous breathing
-   room. The interview feels like a premium professional space, not a SaaS app.
-───────────────────────────────────────────────────────────────────────────── */
+
 
 const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;0,9..40,900;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
@@ -136,10 +132,10 @@ const Timer = ({ durationMinutes, onTimeUp }: { durationMinutes: number; onTimeU
     return () => clearInterval(t);
   }, [secs, onTimeUp]);
 
-  const pct  = Math.max(0, secs / (durationMinutes * 60)) * 100;
+  const pct = Math.max(0, secs / (durationMinutes * 60)) * 100;
   const isLow = secs > 0 && secs < 300;
-  const done  = secs <= 0;
-  const clr   = done ? 'var(--rose)' : isLow ? 'var(--amber)' : 'var(--violet)';
+  const done = secs <= 0;
+  const clr = done ? 'var(--rose)' : isLow ? 'var(--amber)' : 'var(--violet)';
   const C = 2 * Math.PI * 16;
 
   return (
@@ -184,11 +180,11 @@ const Msg = ({ side, text, isTyping }: { side: 'ai' | 'you'; text: string; isTyp
           : { background: 'var(--violet)', color: '#fff', borderRadius: '18px 18px 4px 18px' }}>
         {isTyping
           ? <span className="flex items-center gap-1.5 h-4">
-              {[0, .18, .36].map((d, i) => (
-                <span key={i} className="size-1.5 rounded-full blink"
-                  style={{ background: isAI ? 'var(--ink-4)' : 'rgba(255,255,255,.5)', animationDelay: `${d}s` }} />
-              ))}
-            </span>
+            {[0, .18, .36].map((d, i) => (
+              <span key={i} className="size-1.5 rounded-full blink"
+                style={{ background: isAI ? 'var(--ink-4)' : 'rgba(255,255,255,.5)', animationDelay: `${d}s` }} />
+            ))}
+          </span>
           : text}
       </div>
     </div>
@@ -224,13 +220,13 @@ const TranscriptPanel = ({
       <div className="thin-scroll overflow-y-auto px-5 py-4 space-y-3" style={{ height: '200px' }}>
         {messages.length === 0 && !showTyping
           ? <div className="h-full flex flex-col items-center justify-center gap-2 opacity-40">
-              <span className="material-symbols-outlined text-3xl" style={{ color: 'var(--ink-4)' }}>chat_bubble_outline</span>
-              <p className="text-[11px] text-center font-medium max-w-[170px]" style={{ color: 'var(--ink-3)' }}>{hint}</p>
-            </div>
+            <span className="material-symbols-outlined text-3xl" style={{ color: 'var(--ink-4)' }}>chat_bubble_outline</span>
+            <p className="text-[11px] text-center font-medium max-w-[170px]" style={{ color: 'var(--ink-3)' }}>{hint}</p>
+          </div>
           : <>
-              {messages.map(m => <Msg key={m.id} side={m.side} text={m.text} />)}
-              {showTyping && <Msg side={typingRole} text="" isTyping />}
-            </>
+            {messages.map(m => <Msg key={m.id} side={m.side} text={m.text} />)}
+            {showTyping && <Msg side={typingRole} text="" isTyping />}
+          </>
         }
         <div ref={endRef} />
       </div>
@@ -266,22 +262,22 @@ const InterviewStage: React.FC<{
   sessionId: string | null;
   invitation: Invitation | null;
 }> = ({ onDisconnect, sessionId, invitation }) => {
-  const room     = useRoomContext();
-  const va       = useVoiceAssistant();
+  const room = useRoomContext();
+  const va = useVoiceAssistant();
   const [confirm, setConfirm] = useState(false);
-  const [timeUp,  setTimeUp]  = useState(false);
-  const [buffer,  setBuffer]  = useState(120);
-  const [dbTx,    setDbTx]    = useState<any[]>([]);
+  const [timeUp, setTimeUp] = useState(false);
+  const [buffer, setBuffer] = useState(120);
+  const [dbTx, setDbTx] = useState<any[]>([]);
 
-  const speaking  = va.state === 'speaking';
+  const speaking = va.state === 'speaking';
   const listening = va.state === 'listening';
-  const duration  = invitation?.assessment?.duration_minutes ?? 20;
-  const online    = room.state === 'connected';
+  const duration = invitation?.assessment?.duration_minutes ?? 20;
+  const online = room.state === 'connected';
 
   useEffect(() => {
     if (!sessionId || !online) return;
     const run = async () => {
-      try { const r = await api.get(`/evaluation/transcript/${sessionId}`); if (Array.isArray(r.data)) setDbTx(r.data); } catch {}
+      try { const r = await api.get(`/evaluation/transcript/${sessionId}`); if (Array.isArray(r.data)) setDbTx(r.data); } catch { }
     };
     run(); const id = setInterval(run, 3000); return () => clearInterval(id);
   }, [sessionId, online]);
@@ -295,17 +291,64 @@ const InterviewStage: React.FC<{
 
   useEffect(() => {
     if (!sessionId || !online) return;
-    const id = setInterval(async () => { try { await api.post(`/livekit/session/heartbeat/${sessionId}`); } catch {} }, 5000);
+    const id = setInterval(async () => { try { await api.post(`/livekit/session/heartbeat/${sessionId}`); } catch { } }, 5000);
     return () => clearInterval(id);
   }, [sessionId, online]);
 
-  const allTracks   = useTracks([{ source: Track.Source.Camera, withPlaceholder: false }], { onlySubscribed: true });
+  // ── Listen for interview_ended data message from backend (Approach A) ──
+  const interviewEndedRef = useRef(false);
+  useEffect(() => {
+    if (!room || !online) return;
+
+    const handleDataReceived = (payload: Uint8Array, _participant: any, _kind: any, topic?: string) => {
+      // Only process messages on the interview_control topic
+      if (topic !== 'interview_control') return;
+      if (interviewEndedRef.current) return; // Already handled
+
+      try {
+        const data = JSON.parse(new TextDecoder().decode(payload));
+        if (data.type === 'interview_ended' && data.auto_submit) {
+          interviewEndedRef.current = true;
+          console.log(`[Interview] Received interview_ended signal (reason=${data.reason}). Auto-submitting in 3s...`);
+          // Brief delay so candidate can see/hear the closing message
+          setTimeout(() => {
+            if (!interviewEndedRef.current) return; // Double check
+            onDisconnect();
+          }, 3000);
+        }
+      } catch (e) {
+        console.warn('[Interview] Failed to parse data message:', e);
+      }
+    };
+
+    room.on(RoomEvent.DataReceived, handleDataReceived);
+    return () => { room.off(RoomEvent.DataReceived, handleDataReceived); };
+  }, [room, online, onDisconnect]);
+
+  // ── Fallback: poll session status in case LiveKit data message is missed ──
+  useEffect(() => {
+    if (!sessionId || !online) return;
+    const id = setInterval(async () => {
+      if (interviewEndedRef.current) return; // Already handled
+      try {
+        const res = await api.get(`/livekit/session/${sessionId}/status`);
+        if (res.data?.is_completed) {
+          interviewEndedRef.current = true;
+          console.log('[Interview] Session status polling detected completion. Auto-submitting...');
+          setTimeout(() => onDisconnect(), 2000);
+        }
+      } catch { }
+    }, 5000);
+    return () => clearInterval(id);
+  }, [sessionId, online, onDisconnect]);
+
+  const allTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: false }], { onlySubscribed: true });
   const localTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: false }], { onlySubscribed: false })
     .filter(t => t.participant.identity === room.localParticipant.identity);
 
   const agentTrack = allTracks.find(t => t.participant.identity !== room.localParticipant.identity) as any;
   const localTrack = localTracks[0] as any;
-  const segs       = (useTranscriptions() ?? []) as any[];
+  const segs = (useTranscriptions() ?? []) as any[];
 
   // Build message arrays
   const aiMsgs: { id: string; side: 'ai'; text: string }[] = dbTx
@@ -468,9 +511,11 @@ const InterviewStage: React.FC<{
                 : (
                   /* Refined placeholder */
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-7"
-                    style={{ background: speaking
-                      ? 'linear-gradient(135deg, #f0eeff 0%, #fafafe 60%, #f0f9ff 100%)'
-                      : 'linear-gradient(160deg, var(--canvas) 0%, var(--paper) 100%)' }}>
+                    style={{
+                      background: speaking
+                        ? 'linear-gradient(135deg, #f0eeff 0%, #fafafe 60%, #f0f9ff 100%)'
+                        : 'linear-gradient(160deg, var(--canvas) 0%, var(--paper) 100%)'
+                    }}>
 
                     {/* Concentric rings */}
                     <div className="relative flex items-center justify-center">
@@ -735,13 +780,13 @@ const CandidateInterviewLive: React.FC = () => {
   const navigate = useNavigate();
   const token = searchParams.get('token') || '';
 
-  const [lkToken,     setLkToken]     = useState<string | null>(null);
-  const [lkUrl,       setLkUrl]       = useState('');
-  const [validating,  setValidating]  = useState(false);
-  const [error,       setError]       = useState<string | null>(null);
-  const [connected,   setConnected]   = useState(false);
-  const [sessionId,   setSessionId]   = useState<string | null>(null);
-  const [invitation,  setInvitation]  = useState<Invitation | null>(null);
+  const [lkToken, setLkToken] = useState<string | null>(null);
+  const [lkUrl, setLkUrl] = useState('');
+  const [validating, setValidating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [invitation, setInvitation] = useState<Invitation | null>(null);
 
   const connect = useCallback(async () => {
     if (!token) { setError('No invitation token found in URL.'); return; }
@@ -749,7 +794,7 @@ const CandidateInterviewLive: React.FC = () => {
     try {
       const inv = await api.get(`/invitation/validate/${token}`);
       setInvitation(inv.data);
-      const lk  = await api.post(`/livekit/token`, null, { params: { invitation_token: token } });
+      const lk = await api.post(`/livekit/token`, null, { params: { invitation_token: token } });
       setLkToken(lk.data.token); setLkUrl(lk.data.url); setSessionId(lk.data.session_id); setConnected(true);
     } catch (e: any) {
       setError(e.response?.data?.detail || 'Failed to start session. Please try again.');
@@ -758,7 +803,7 @@ const CandidateInterviewLive: React.FC = () => {
 
   const disconnect = useCallback(async () => {
     if (sessionId) {
-      try { await api.post(`/livekit/session/${sessionId}/complete`, null, { params: { auto_evaluate: true } }); } catch {}
+      try { await api.post(`/livekit/session/${sessionId}/complete`, null, { params: { auto_evaluate: true } }); } catch { }
     }
     setLkToken(null); setLkUrl(''); setSessionId(null); setConnected(false);
     navigate(`/candidate/completion?token=${token}`);

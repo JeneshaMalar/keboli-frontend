@@ -13,13 +13,7 @@ interface AssessmentListProps {
   onDelete: (id: string) => void;
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
 
-/**
- * Converts a raw JD string into structured sections.
- * Detects common heading patterns like "Responsibilities:", "Requirements:" etc.
- * and bullet-point lines (lines starting with -, *, •, or numbered).
- */
 function parseJobDescription(jd: string): Array<{ heading?: string; items: string[] }> {
   if (!jd) return [];
 
@@ -27,14 +21,12 @@ function parseJobDescription(jd: string): Array<{ heading?: string; items: strin
   const sections: Array<{ heading?: string; items: string[] }> = [];
   let current: { heading?: string; items: string[] } = { items: [] };
 
-  // const headingRe = /^(.{3,60}):?\s*$/;
   const bulletRe = /^[-*•]\s+(.+)$/;
   const numberedRe = /^\d+[.)]\s+(.+)$/;
 
   for (const line of lines) {
-    // Detect section headings: ALL-CAPS line or ends with ":"
     const isHeading =
-      /^[A-Z][A-Z\s&/()-]{3,}:?$/.test(line) ||   // ALL CAPS
+      /^[A-Z][A-Z\s&/()-]{3,}:?$/.test(line) ||   
       (line.endsWith(':') && line.length < 60 && !bulletRe.test(line));
 
     if (isHeading) {
@@ -49,7 +41,6 @@ function parseJobDescription(jd: string): Array<{ heading?: string; items: strin
     if (bullet) {
       current.items.push(bullet[1]);
     } else {
-      // Plain sentence – treat as a single "item"
       current.items.push(line);
     }
   }
@@ -61,9 +52,7 @@ function parseJobDescription(jd: string): Array<{ heading?: string; items: strin
   return sections;
 }
 
-/** Auto-generates a contrasting pastel color pair from any string. */
 function colorFromString(str: string): { bg: string; text: string; border: string } {
-  // Map from first char code to one of 8 hand-picked palette slots
   const palettes = [
     { bg: 'bg-indigo-50',   text: 'text-indigo-600',   border: 'border-indigo-200/80' },
     { bg: 'bg-cyan-50',     text: 'text-cyan-600',     border: 'border-cyan-200/80' },
@@ -75,24 +64,20 @@ function colorFromString(str: string): { bg: string; text: string; border: strin
     { bg: 'bg-orange-50',   text: 'text-orange-600',   border: 'border-orange-200/80' },
   ];
 
-  // Simple hash: sum char-codes mod palette length
   const hash = (str || '').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   return palettes[hash % palettes.length];
 }
 
-/** Extracts an array of skill objects from any shape of skill_graph JSON. */
 function normalizeSkills(skillGraph: unknown): Array<Record<string, unknown>> {
   if (!skillGraph) return [];
   if (Array.isArray(skillGraph)) return skillGraph as Array<Record<string, unknown>>;
 
   const g = skillGraph as Record<string, unknown>;
 
-  // Common wrapper keys
   for (const key of ['skills', 'nodes', 'items', 'data']) {
     if (Array.isArray(g[key])) return g[key] as Array<Record<string, unknown>>;
   }
 
-  // If it's an object of category → array, flatten it
   const values = Object.values(g);
   if (values.every(Array.isArray)) {
     return (values as unknown[][]).flat() as Array<Record<string, unknown>>;
@@ -101,16 +86,13 @@ function normalizeSkills(skillGraph: unknown): Array<Record<string, unknown>> {
   return [];
 }
 
-/** Safely reads a numeric weightage from various field names and returns 0–100. */
 function getWeightPercent(skill: Record<string, unknown>): number {
   const raw = skill.weightage ?? skill.weight ?? skill.score ?? skill.percentage ?? 0;
   const n = Number(raw);
   if (isNaN(n)) return 0;
-  // Support both 0–1 fractional and 0–100 integer
   return n <= 1 ? Math.round(n * 100) : Math.round(n);
 }
 
-/** Pick a sensible display name from various possible field names. */
 function getSkillName(skill: Record<string, unknown>): string {
   return String(skill.name ?? skill.title ?? skill.skill ?? skill.label ?? 'Unnamed Skill');
 }
@@ -123,13 +105,10 @@ function getSkillDescription(skill: Record<string, unknown>): string {
   return String(skill.description ?? skill.desc ?? skill.notes ?? '');
 }
 
-// ─── Sub-components ─────────────────────────────────────────────────────────
 
-/** Renders a job description with rich, structured formatting. */
 function JobDescriptionViewer({ text }: { text: string }) {
   const sections = parseJobDescription(text);
 
-  // If no structure was detected, render as readable prose
   if (sections.length === 1 && !sections[0].heading) {
     return (
       <div className="bg-slate-50/80 border border-slate-100 rounded-xl p-5 max-h-60 overflow-y-auto custom-scrollbar">
@@ -152,7 +131,6 @@ function JobDescriptionViewer({ text }: { text: string }) {
           )}
           <ul className="space-y-1.5">
             {section.items.map((item, ii) => {
-              // If the original line was a bullet, render as list; otherwise prose
               const isBullet = section.items.length > 1 || section.heading;
               return isBullet ? (
                 <li key={ii} className="flex items-start gap-2">
@@ -170,7 +148,6 @@ function JobDescriptionViewer({ text }: { text: string }) {
   );
 }
 
-/** Renders the skill graph fully dynamically from any JSON shape. */
 function SkillGraphViewer({ skillGraph }: { skillGraph: unknown }) {
   const skills = normalizeSkills(skillGraph);
 
@@ -183,7 +160,6 @@ function SkillGraphViewer({ skillGraph }: { skillGraph: unknown }) {
     );
   }
 
-  // Group by category for a cleaner visual structure
   const grouped = skills.reduce<Record<string, Array<Record<string, unknown>>>>((acc, skill) => {
     const cat = getSkillCategory(skill) || 'General';
     if (!acc[cat]) acc[cat] = [];
@@ -215,7 +191,6 @@ function SkillGraphViewer({ skillGraph }: { skillGraph: unknown }) {
                 const desc = getSkillDescription(skill);
                 const { text } = colorFromString(category);
 
-                // Collect any extra fields to display as subtle tags
                 const knownKeys = new Set(['name', 'title', 'skill', 'label', 'category', 'type',
                   'group', 'weightage', 'weight', 'score', 'percentage', 'description', 'desc', 'notes']);
                 const extraEntries = Object.entries(skill).filter(
@@ -227,11 +202,9 @@ function SkillGraphViewer({ skillGraph }: { skillGraph: unknown }) {
                     key={idx}
                     className="bg-white border border-slate-200/80 rounded-xl p-3.5 hover:shadow-sm transition-all duration-200"
                   >
-                    {/* Top row */}
                     <div className="flex items-start justify-between gap-3 mb-2.5">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-sm text-slate-900 leading-tight">{name}</span>
-                        {/* Extra metadata tags (e.g. level, type, etc.) */}
                         {extraEntries.map(([k, v]) => (
                           <span
                             key={k}
@@ -247,7 +220,6 @@ function SkillGraphViewer({ skillGraph }: { skillGraph: unknown }) {
                       )}
                     </div>
 
-                    {/* Weight bar */}
                     {weight > 0 && (
                       <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-2.5">
                         <div
@@ -260,7 +232,6 @@ function SkillGraphViewer({ skillGraph }: { skillGraph: unknown }) {
                       </div>
                     )}
 
-                    {/* Description */}
                     {desc && desc !== 'undefined' && (
                       <p className="text-xs text-slate-500 leading-relaxed mt-1">{desc}</p>
                     )}
@@ -274,8 +245,6 @@ function SkillGraphViewer({ skillGraph }: { skillGraph: unknown }) {
     </div>
   );
 }
-
-// ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function AssessmentList({
   assessments,
@@ -443,7 +412,6 @@ export default function AssessmentList({
         />
       </div>
 
-      {/* ── Assessment Details Modal ─────────────────────────────────────────── */}
       <Modal
         isOpen={!!selectedAssessment}
         onClose={() => setSelectedAssessment(null)}
@@ -460,7 +428,6 @@ export default function AssessmentList({
       >
         {selectedAssessment && (
           <div className="space-y-5 py-2">
-            {/* ── Stats strip ───────────────────────────────────────────── */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
                 { label: 'Duration',   value: `${selectedAssessment.duration_minutes}m` },
@@ -487,9 +454,7 @@ export default function AssessmentList({
               ))}
             </div>
 
-            {/* ── Tabbed content area ───────────────────────────────────── */}
             <div className="border border-slate-200/80 rounded-2xl overflow-hidden">
-              {/* Tab bar */}
               <div className="flex border-b border-slate-100 bg-slate-50/60">
                 <button
                   onClick={() => setActiveTab('jd')}
@@ -520,17 +485,13 @@ export default function AssessmentList({
                 )}
               </div>
 
-              {/* Tab panels */}
               <div className="p-4">
-                {/* ── JD Tab ──────────────────────────────────────────── */}
                 {activeTab === 'jd' && (
                   <JobDescriptionViewer text={selectedAssessment.job_description} />
                 )}
 
-                {/* ── Skills Tab ──────────────────────────────────────── */}
                 {activeTab === 'skills' && selectedAssessment.skill_graph && (
                   <div>
-                    {/* Edit JSON toggle */}
                     <div className="flex items-center justify-end mb-3">
                       <button
                         onClick={() => {
