@@ -709,7 +709,7 @@ const InterviewStage: React.FC<{
 };
 
 /* ── Loading / error screen ───────────────────────────────────────────────── */
-const LoadingScreen = ({ validating, error, onRetry }: { validating: boolean; error: string | null; onRetry: () => void }) => (
+const LoadingScreen = ({ validating, error, alreadyCompleted, onRetry }: { validating: boolean; error: string | null; alreadyCompleted?: boolean; onRetry: () => void }) => (
   <div className="min-h-screen canvas-bg flex items-center justify-center p-6">
     <style>{STYLES}</style>
 
@@ -755,13 +755,15 @@ const LoadingScreen = ({ validating, error, onRetry }: { validating: boolean; er
             <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5" style={{ color: 'var(--rose)' }}>error_outline</span>
             <p className="text-[13px] font-medium leading-relaxed" style={{ color: '#9f1239' }}>{error}</p>
           </div>
-          <button onClick={onRetry}
-            className="w-full py-3.5 rounded-xl text-white text-sm font-black uppercase tracking-wider transition-all active:scale-[.98]"
-            style={{ background: 'var(--ink)', boxShadow: '0 4px 20px rgba(14,14,17,.2)' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#1e1e24')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'var(--ink)')}>
-            Retry Connection
-          </button>
+          {!alreadyCompleted && (
+            <button onClick={onRetry}
+              className="w-full py-3.5 rounded-xl text-white text-sm font-black uppercase tracking-wider transition-all active:scale-[.98]"
+              style={{ background: 'var(--ink)', boxShadow: '0 4px 20px rgba(14,14,17,.2)' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#1e1e24')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'var(--ink)')}>
+              Retry Connection
+            </button>
+          )}
         </div>
       )}
 
@@ -784,20 +786,26 @@ const CandidateInterviewLive: React.FC = () => {
   const [lkUrl, setLkUrl] = useState('');
   const [validating, setValidating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [alreadyCompleted, setAlreadyCompleted] = useState(false);
   const [connected, setConnected] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [invitation, setInvitation] = useState<Invitation | null>(null);
 
   const connect = useCallback(async () => {
     if (!token) { setError('No invitation token found in URL.'); return; }
-    setValidating(true); setError(null);
+    setValidating(true); setError(null); setAlreadyCompleted(false);
     try {
       const inv = await api.get(`/invitation/validate/${token}`);
       setInvitation(inv.data);
       const lk = await api.post(`/livekit/token`, null, { params: { invitation_token: token } });
       setLkToken(lk.data.token); setLkUrl(lk.data.url); setSessionId(lk.data.session_id); setConnected(true);
     } catch (e: any) {
-      setError(e.response?.data?.detail || 'Failed to start session. Please try again.');
+      if (e.response?.status === 409) {
+        setAlreadyCompleted(true);
+        setError('This interview has already been completed and cannot be restarted.');
+      } else {
+        setError(e.response?.data?.detail || 'Failed to start session. Please try again.');
+      }
     } finally { setValidating(false); }
   }, [token]);
 
@@ -814,7 +822,9 @@ const CandidateInterviewLive: React.FC = () => {
   }, [token, connected, validating, connect]);
 
   if (!connected || !lkToken)
-    return <LoadingScreen validating={validating} error={error} onRetry={connect} />;
+    return <LoadingScreen validating={validating} error={error} alreadyCompleted={alreadyCompleted} onRetry={connect} />;
+
+
 
   return (
     <div className="min-h-screen canvas-bg">

@@ -83,6 +83,66 @@ function StatCard({ label, value, icon, color }: { label: string; value: number 
     );
 }
 
+// ─── Delete Confirm Modal ─────────────────────────────────────────────────────
+
+function DeleteConfirmModal({ candidate, onConfirm, onClose, deleting }: {
+    candidate: any | null; onConfirm: () => void; onClose: () => void; deleting: boolean;
+}) {
+    if (!candidate) return null;
+    return (
+        <Modal isOpen={!!candidate} onClose={onClose} title="" size="sm">
+            <div className="flex flex-col items-center text-center gap-4 py-2">
+                {/* Icon */}
+                <div className="size-14 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-rose-500 text-[28px]">delete_forever</span>
+                </div>
+
+                {/* Copy */}
+                <div>
+                    <p className="text-base font-black text-slate-900 mb-1">Delete candidate?</p>
+                    <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                        <span className="font-bold text-slate-700">{candidate.name}</span> and all their
+                        assessment history will be permanently removed. This cannot be undone.
+                    </p>
+                </div>
+
+                {/* Candidate pill */}
+                <div className="flex items-center gap-2.5 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl w-full">
+                    <div className="size-8 rounded-lg bg-gradient-to-br from-rose-100 to-rose-50 border border-rose-100 flex items-center justify-center text-rose-500 font-black text-xs shrink-0">
+                        {getInitials(candidate.name)}
+                    </div>
+                    <div className="text-left min-w-0">
+                        <p className="text-xs font-bold text-slate-800 truncate">{candidate.name}</p>
+                        <p className="text-[10px] text-slate-400 font-medium truncate">{candidate.email}</p>
+                    </div>
+                    {candidate.invitation_count > 0 && (
+                        <span className="ml-auto shrink-0 text-[10px] font-bold text-slate-400 bg-white border border-slate-200 px-2 py-0.5 rounded-lg">
+                            {candidate.invitation_count} invite{candidate.invitation_count !== 1 ? 's' : ''}
+                        </span>
+                    )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2.5 w-full">
+                    <Button variant="secondary" onClick={onClose} disabled={deleting} className="flex-1">
+                        Cancel
+                    </Button>
+                    <button
+                        onClick={onConfirm}
+                        disabled={deleting}
+                        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold rounded-xl transition-all shadow-sm shadow-rose-200 active:scale-[0.97] disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                        {deleting
+                            ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Deleting…</>
+                            : <><span className="material-symbols-outlined text-[16px]">delete</span>Yes, Delete</>
+                        }
+                    </button>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
 // ─── Bulk Invite Modal ───────────────────────────────────────────────────────
 
 function BulkInviteModal({ isOpen, onClose, selectedCandidates, assessments, invitations, onSend }: {
@@ -292,6 +352,13 @@ export default function CandidateManagementPage() {
     const [showTranscript, setShowTranscript] = useState(false);
     const [triggeringEval, setTriggeringEval] = useState(false);
 
+    // ── FIX: track which session is being viewed (not always the latest) ──────
+    const [activeReportSessionId, setActiveReportSessionId] = useState<string | null>(null);
+
+    // ── Delete confirmation modal ─────────────────────────────────────────────
+    const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+    const [deleting, setDeleting]         = useState(false);
+
     const location = useLocation();
 
     useEffect(() => {
@@ -303,15 +370,31 @@ export default function CandidateManagementPage() {
         if (t) setAssessmentFilter(t);
     }, [location.search]);
 
+    // ── When the candidate modal opens, default to their latest session ────────
     useEffect(() => {
-        if (selectedCandidate?.latest_session_id) {
-            setEvalLoading(true); setEvalReport(null); setShowTranscript(false);
-            apiClient.get(`/evaluation/report/${selectedCandidate.latest_session_id}`)
-                .then((r: { data: any }) => setEvalReport(r.data))
-                .catch(() => setEvalReport(null))
-                .finally(() => setEvalLoading(false));
-        } else if (selectedCandidate) { setEvalReport(null); }
-    }, [selectedCandidate?.latest_session_id]);
+        if (selectedCandidate) {
+            setActiveReportSessionId(selectedCandidate.latest_session_id ?? null);
+            setShowTranscript(false);
+        } else {
+            setActiveReportSessionId(null);
+            setEvalReport(null);
+        }
+    }, [selectedCandidate?.id]);
+
+    // ── FIX: fetch report whenever activeReportSessionId changes ─────────────
+    useEffect(() => {
+        if (!activeReportSessionId) {
+            setEvalReport(null);
+            return;
+        }
+        setEvalLoading(true);
+        setEvalReport(null);
+        setShowTranscript(false);
+        apiClient.get(`/evaluation/report/${activeReportSessionId}`)
+            .then((r: { data: any }) => setEvalReport(r.data))
+            .catch(() => setEvalReport(null))
+            .finally(() => setEvalLoading(false));
+    }, [activeReportSessionId]);
 
     // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -423,10 +506,22 @@ export default function CandidateManagementPage() {
         await dispatch(revokeInvitation(invitationId)).unwrap(); dispatch(fetchInvitations());
     };
 
-    const handleDelete = async (candidateId: string) => {
-        if (!window.confirm('Delete this candidate?')) return;
-        try { await dispatch(deleteCandidate(candidateId)).unwrap(); dispatch(fetchCandidates()); }
-        catch (error: any) { alert('Failed: ' + (typeof error === 'string' ? error : error?.message)); }
+    const handleDelete = (candidate: any) => {
+        setDeleteTarget(candidate);
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return;
+        setDeleting(true);
+        try {
+            await dispatch(deleteCandidate(deleteTarget.id)).unwrap();
+            dispatch(fetchCandidates());
+            setDeleteTarget(null);
+        } catch (error: any) {
+            alert('Failed: ' + (typeof error === 'string' ? error : error?.message));
+        } finally {
+            setDeleting(false);
+        }
     };
 
     const handleGenerateReport = async (sessionId: string) => {
@@ -503,7 +598,7 @@ export default function CandidateManagementPage() {
                 <span className="ml-auto text-[11px] font-bold text-slate-400">{filteredData.length} result{filteredData.length !== 1 ? 's' : ''}</span>
             </div>
 
-            {/* ── Bulk action bar — animates in when candidates are selected ── */}
+            {/* ── Bulk action bar ── */}
             {selectedIds.size > 0 && (
                 <div className="flex items-center justify-between gap-4 px-5 py-3.5 bg-primary/[0.04] border border-primary/20 rounded-2xl">
                     <div className="flex items-center gap-3">
@@ -650,7 +745,7 @@ export default function CandidateManagementPage() {
                                                         <span className="material-symbols-outlined text-[18px]">block</span>
                                                     </button>
                                                 </>)}
-                                                <button onClick={() => handleDelete(c.id)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all" title="Delete">
+                                                <button onClick={() => handleDelete(c)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all" title="Delete">
                                                     <span className="material-symbols-outlined text-[18px]">delete</span>
                                                 </button>
                                             </div>
@@ -751,10 +846,11 @@ export default function CandidateManagementPage() {
             <BulkInviteModal isOpen={showBulkModal} onClose={() => setShowBulkModal(false)}
                 selectedCandidates={selectedCandidatesData} assessments={assessments} invitations={invitations} onSend={handleBulkSend} />
 
-            {/* Candidate Detail Modal */}
+            {/* ── Candidate Detail Modal ─────────────────────────────────────────── */}
             <Modal isOpen={!!selectedCandidate} onClose={() => setSelectedCandidate(null)} title="" size="xl">
                 {selectedCandidate && (
                     <div className="space-y-6 -mt-2">
+                        {/* Hero strip */}
                         <div className="flex items-center justify-between p-5 -mx-6 -mt-4 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
                             <div className="flex items-center gap-4">
                                 <div className="size-14 rounded-2xl bg-gradient-to-br from-primary/15 to-indigo-100 border border-primary/10 flex items-center justify-center text-primary font-black text-lg">{getInitials(selectedCandidate.name)}</div>
@@ -766,6 +862,7 @@ export default function CandidateManagementPage() {
                             </button>
                         </div>
 
+                        {/* Assessment Journey */}
                         <div>
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Assessment Journey</p>
                             {selectedCandidate.all_invitations?.length > 0 ? (
@@ -773,15 +870,44 @@ export default function CandidateManagementPage() {
                                     {selectedCandidate.all_invitations.map((inv: any, idx: number) => {
                                         const cfg = getStatusConfig(inv.status);
                                         const aTitle = assessments.find(a => a.id === inv.assessment_id)?.title ?? 'Assessment';
+                                        // FIX: each invitation carries its own session id
+                                        const sessionId: string | undefined = (inv as any)?.latest_session_id;
+                                        const isActiveSession = !!sessionId && activeReportSessionId === sessionId;
                                         return (
-                                            <div key={inv.id} className={`flex items-center justify-between p-3.5 rounded-xl border ${idx === 0 ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100'}`}>
+                                            <div key={inv.id} className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${
+                                                isActiveSession
+                                                    ? 'bg-primary/[0.04] border-primary/30 ring-1 ring-primary/20'
+                                                    : idx === 0 ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100'
+                                            }`}>
                                                 <div className="flex items-center gap-3">
                                                     <span className={`size-8 rounded-lg flex items-center justify-center ${cfg.bg} border ${cfg.border}`}><span className={`size-2 rounded-full ${cfg.dot}`} /></span>
-                                                    <div><p className="text-xs font-bold text-slate-800">{aTitle}</p><p className="text-[10px] text-slate-400 font-medium">{new Date(inv.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p></div>
+                                                    <div>
+                                                        <p className="text-xs font-bold text-slate-800">{aTitle}</p>
+                                                        <p className="text-[10px] text-slate-400 font-medium">{new Date(inv.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     {idx === 0 && <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-2 py-0.5 rounded-md">Latest</span>}
                                                     <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg border ${cfg.bg} ${cfg.text} ${cfg.border}`}>{cfg.label}</span>
+
+                                                    {/* ── FIX: "View Report" button on every invitation that has a session ── */}
+                                                    {sessionId && (
+                                                        <button
+                                                            onClick={() => setActiveReportSessionId(isActiveSession ? null : sessionId)}
+                                                            title={isActiveSession ? 'Collapse report' : 'View report for this session'}
+                                                            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
+                                                                isActiveSession
+                                                                    ? 'bg-primary text-white border-primary shadow-sm'
+                                                                    : 'bg-white text-primary border-primary/30 hover:bg-primary/5'
+                                                            }`}
+                                                        >
+                                                            <span className="material-symbols-outlined text-[13px]">
+                                                                {isActiveSession ? 'expand_less' : 'analytics'}
+                                                            </span>
+                                                            {isActiveSession ? 'Collapse' : 'View Report'}
+                                                        </button>
+                                                    )}
+
                                                     {inv.status?.toUpperCase() === 'SENT' && <>
                                                         <button onClick={() => copyLink(inv)} className="p-1.5 hover:bg-sky-50 hover:text-sky-600 text-slate-400 rounded-lg transition-colors" title="Copy"><span className="material-symbols-outlined text-[15px]">content_copy</span></button>
                                                         <button onClick={() => handleRevoke(inv.id)} className="p-1.5 hover:bg-amber-50 hover:text-amber-600 text-slate-400 rounded-lg transition-colors" title="Revoke"><span className="material-symbols-outlined text-[15px]">block</span></button>
@@ -799,102 +925,131 @@ export default function CandidateManagementPage() {
                             )}
                         </div>
 
-                        <div className="border-t border-slate-100 pt-5">
-                            <div className="flex items-center justify-between mb-4">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Evaluation Report</p>
-                                {!evalLoading && evalReport?.evaluation && <Button variant="primary" size="sm" onClick={() => window.open(`/evaluation/${selectedCandidate.latest_session_id}`, '_blank')}>Full Report ↗</Button>}
-                            </div>
-                            {evalLoading ? (
-                                <div className="flex flex-col items-center justify-center py-14 gap-3"><div className="w-9 h-9 border-[3px] border-primary/20 border-t-primary rounded-full animate-spin" /><span className="text-xs font-semibold text-slate-400">Loading…</span></div>
-                            ) : !evalReport?.evaluation ? (
-                                <div className="p-10 text-center bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
-                                    <div className="inline-flex items-center justify-center size-12 rounded-2xl bg-white border border-slate-200 text-slate-400 mb-4 shadow-sm"><span className="material-symbols-outlined text-2xl">analytics</span></div>
-                                    {(() => {
-                                        const s = selectedCandidate?.latest_session_status?.toUpperCase();
-                                        const isC = s === 'COMPLETED', isA = s === 'ABANDONED', isP = s === 'IN_PROGRESS';
-                                        return (<>
-                                            <p className="text-sm font-black text-slate-800 mb-1.5">{isC ? 'Report Pending' : isA ? 'Interview Abandoned' : isP ? 'In Progress' : 'No Session Yet'}</p>
-                                            <p className="text-xs text-slate-400 max-w-[240px] mx-auto mb-5">{isC ? 'Interview finished. Generate the AI report.' : isA ? 'Left early. Partial report available.' : isP ? 'Candidate is in the interview now.' : 'No session started yet.'}</p>
-                                            {(isC || isA) && <Button variant="primary" size="sm" onClick={() => handleGenerateReport(selectedCandidate.latest_session_id)} loading={triggeringEval}>Generate AI Report</Button>}
-                                        </>);
-                                    })()}
+                        {/* ── Evaluation Report panel — shown below whichever row is active ── */}
+                        {activeReportSessionId && (
+                            <div className="border-t border-slate-100 pt-5">
+                                <div className="flex items-center justify-between mb-4">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Evaluation Report</p>
+                                    {!evalLoading && evalReport?.evaluation && (
+                                        <Button variant="primary" size="sm" onClick={() => window.open(`/evaluation/${activeReportSessionId}`, '_blank')}>
+                                            Full Report ↗
+                                        </Button>
+                                    )}
                                 </div>
-                            ) : (() => {
-                                const ev = evalReport.evaluation; const transcript = evalReport.transcript;
-                                const rec = ev?.hiring_recommendation?.toUpperCase();
-                                const recV = rec === 'STRONG_HIRE' ? 'success' : rec === 'HIRE' ? 'active' : rec === 'REJECT' ? 'error' : 'secondary';
-                                const cats = [
-                                    { label: 'Technical', score: ev?.technical_score, icon: 'code' },
-                                    { label: 'Communication', score: ev?.communication_score, icon: 'forum' },
-                                    { label: 'Confidence', score: ev?.confidence_score, icon: 'psychology' },
-                                    { label: 'Cultural Fit', score: ev?.cultural_alignment_score, icon: 'diversity_3' },
-                                ];
-                                return (
-                                    <div className="space-y-5">
-                                        <div className="flex flex-col md:flex-row gap-4">
-                                            <div className="shrink-0 bg-white border border-slate-200/80 rounded-2xl p-5 flex flex-col items-center justify-center min-w-[160px] shadow-sm">
-                                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Overall</p>
-                                                <div className="relative flex items-center justify-center w-20 h-20">
-                                                    <svg className="w-20 h-20 -rotate-90" viewBox="0 0 120 120">
-                                                        <circle cx="60" cy="60" r="52" fill="none" stroke="#f1f5f9" strokeWidth="10" />
-                                                        <circle cx="60" cy="60" r="52" fill="none" stroke="currentColor" strokeWidth="10"
-                                                            strokeDasharray={`${(ev?.total_score || 0) * 3.27} 327`} strokeLinecap="round"
-                                                            className={`transition-all duration-1000 ${(ev?.total_score || 0) >= 80 ? 'text-emerald-500' : (ev?.total_score || 0) >= 60 ? 'text-amber-500' : 'text-rose-500'}`} />
-                                                    </svg>
-                                                    <span className={`absolute text-xl font-black ${getScoreColor(ev?.total_score || 0)}`}>{ev?.total_score ? Math.round(ev.total_score) : '—'}</span>
-                                                </div>
-                                                <div className="mt-3"><Badge variant={recV as any} className="text-[10px] font-black">{(ev?.hiring_recommendation ?? 'Pending').replace(/_/g, ' ').toUpperCase()}</Badge></div>
-                                            </div>
-                                            <div className="flex-1 grid grid-cols-2 gap-3">
-                                                {cats.map(cat => { const s = cat.score ?? 0; return (
-                                                    <div key={cat.label} className="bg-white border border-slate-200/80 rounded-xl p-3.5 hover:shadow-sm transition-shadow">
-                                                        <div className="flex items-center justify-between mb-2">
-                                                            <div className="flex items-center gap-1.5"><span className="material-symbols-outlined text-primary text-[14px]">{cat.icon}</span><span className="text-xs font-bold text-slate-700">{cat.label}</span></div>
-                                                            <span className={`text-xs font-black ${getScoreColor(s)}`}>{cat.score != null ? Math.round(cat.score) : '—'}</span>
-                                                        </div>
-                                                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full bg-gradient-to-r ${getScoreBarColor(s)} rounded-full`} style={{ width: `${s}%` }} /></div>
-                                                    </div>
-                                                ); })}
-                                            </div>
+
+                                {evalLoading ? (
+                                    <div className="flex flex-col items-center justify-center py-14 gap-3">
+                                        <div className="w-9 h-9 border-[3px] border-primary/20 border-t-primary rounded-full animate-spin" />
+                                        <span className="text-xs font-semibold text-slate-400">Loading…</span>
+                                    </div>
+                                ) : !evalReport?.evaluation ? (
+                                    <div className="p-10 text-center bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
+                                        <div className="inline-flex items-center justify-center size-12 rounded-2xl bg-white border border-slate-200 text-slate-400 mb-4 shadow-sm">
+                                            <span className="material-symbols-outlined text-2xl">analytics</span>
                                         </div>
-                                        {ev?.ai_summary && (
-                                            <div className="bg-gradient-to-br from-slate-50 to-white rounded-2xl border border-slate-200/80 p-5">
-                                                <div className="flex items-center gap-2 mb-3"><span className="material-symbols-outlined text-primary text-[18px]">auto_awesome</span><span className="text-xs font-black text-slate-800 uppercase tracking-widest">AI Analysis</span></div>
-                                                <p className="text-sm text-slate-600 leading-relaxed">{ev.ai_summary}</p>
-                                            </div>
-                                        )}
-                                        <div className="border border-slate-200/80 rounded-2xl overflow-hidden">
-                                            <button className="w-full flex items-center justify-between px-5 py-3.5 bg-white hover:bg-slate-50/60 transition-colors" onClick={() => setShowTranscript(!showTranscript)}>
-                                                <div className="flex items-center gap-2"><span className="material-symbols-outlined text-primary text-[18px]">chat_bubble_outline</span><span className="text-xs font-black text-slate-800 uppercase tracking-widest">Interview Transcript</span></div>
-                                                <span className={`material-symbols-outlined text-slate-400 text-[18px] transition-transform duration-200 ${showTranscript ? 'rotate-180' : ''}`}>expand_more</span>
-                                            </button>
-                                            {showTranscript && (
-                                                <div className="border-t border-slate-100 p-3 bg-white">
-                                                    {transcript?.full_transcript?.length > 0 ? (
-                                                        <div className="max-h-64 overflow-y-auto space-y-3 p-2 custom-scrollbar">
-                                                            {transcript.full_transcript.map((turn: any, i: number) => {
-                                                                const isAI = turn.role?.toLowerCase() === 'interviewer';
-                                                                return (
-                                                                    <div key={i} className={`flex ${isAI ? 'justify-start' : 'justify-end'}`}>
-                                                                        <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs shadow-sm ${isAI ? 'bg-slate-50 text-slate-900 border border-slate-100 rounded-tl-none' : 'bg-primary text-white rounded-tr-none'}`}>
-                                                                            <p className={`text-[8px] font-black uppercase tracking-widest mb-1 ${isAI ? 'text-primary' : 'text-white/60'}`}>{isAI ? 'AI Interviewer' : 'Candidate'}</p>
-                                                                            <p className="font-medium leading-relaxed">{turn.text || turn.content}</p>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })}
+                                        {(() => {
+                                            // Find the session status for the active session specifically
+                                            const matchedInv = selectedCandidate.all_invitations?.find(
+                                                (inv: any) => (inv as any)?.latest_session_id === activeReportSessionId
+                                            );
+                                            const s = (matchedInv as any)?.latest_session_status?.toUpperCase();
+                                            const isC = s === 'COMPLETED', isA = s === 'ABANDONED', isP = s === 'IN_PROGRESS';
+                                            return (<>
+                                                <p className="text-sm font-black text-slate-800 mb-1.5">{isC ? 'Report Pending' : isA ? 'Interview Abandoned' : isP ? 'In Progress' : 'No Session Yet'}</p>
+                                                <p className="text-xs text-slate-400 max-w-[240px] mx-auto mb-5">{isC ? 'Interview finished. Generate the AI report.' : isA ? 'Left early. Partial report available.' : isP ? 'Candidate is in the interview now.' : 'No session started yet.'}</p>
+                                                {(isC || isA) && (
+                                                    <Button variant="primary" size="sm" onClick={() => handleGenerateReport(activeReportSessionId)} loading={triggeringEval}>
+                                                        Generate AI Report
+                                                    </Button>
+                                                )}
+                                            </>);
+                                        })()}
+                                    </div>
+                                ) : (() => {
+                                    const ev = evalReport.evaluation; const transcript = evalReport.transcript;
+                                    const rec = ev?.hiring_recommendation?.toUpperCase();
+                                    const recV = rec === 'STRONG_HIRE' ? 'success' : rec === 'HIRE' ? 'active' : rec === 'REJECT' ? 'error' : 'secondary';
+                                    const cats = [
+                                        { label: 'Technical', score: ev?.technical_score, icon: 'code' },
+                                        { label: 'Communication', score: ev?.communication_score, icon: 'forum' },
+                                        { label: 'Confidence', score: ev?.confidence_score, icon: 'psychology' },
+                                        { label: 'Cultural Fit', score: ev?.cultural_alignment_score, icon: 'diversity_3' },
+                                    ];
+                                    return (
+                                        <div className="space-y-5">
+                                            <div className="flex flex-col md:flex-row gap-4">
+                                                <div className="shrink-0 bg-white border border-slate-200/80 rounded-2xl p-5 flex flex-col items-center justify-center min-w-[160px] shadow-sm">
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Overall</p>
+                                                    <div className="relative flex items-center justify-center w-20 h-20">
+                                                        <svg className="w-20 h-20 -rotate-90" viewBox="0 0 120 120">
+                                                            <circle cx="60" cy="60" r="52" fill="none" stroke="#f1f5f9" strokeWidth="10" />
+                                                            <circle cx="60" cy="60" r="52" fill="none" stroke="currentColor" strokeWidth="10"
+                                                                strokeDasharray={`${(ev?.total_score || 0) * 3.27} 327`} strokeLinecap="round"
+                                                                className={`transition-all duration-1000 ${(ev?.total_score || 0) >= 80 ? 'text-emerald-500' : (ev?.total_score || 0) >= 60 ? 'text-amber-500' : 'text-rose-500'}`} />
+                                                        </svg>
+                                                        <span className={`absolute text-xl font-black ${getScoreColor(ev?.total_score || 0)}`}>{ev?.total_score ? Math.round(ev.total_score) : '—'}</span>
+                                                    </div>
+                                                    <div className="mt-3"><Badge variant={recV as any} className="text-[10px] font-black">{(ev?.hiring_recommendation ?? 'Pending').replace(/_/g, ' ').toUpperCase()}</Badge></div>
+                                                </div>
+                                                <div className="flex-1 grid grid-cols-2 gap-3">
+                                                    {cats.map(cat => { const s = cat.score ?? 0; return (
+                                                        <div key={cat.label} className="bg-white border border-slate-200/80 rounded-xl p-3.5 hover:shadow-sm transition-shadow">
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <div className="flex items-center gap-1.5"><span className="material-symbols-outlined text-primary text-[14px]">{cat.icon}</span><span className="text-xs font-bold text-slate-700">{cat.label}</span></div>
+                                                                <span className={`text-xs font-black ${getScoreColor(s)}`}>{cat.score != null ? Math.round(cat.score) : '—'}</span>
+                                                            </div>
+                                                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full bg-gradient-to-r ${getScoreBarColor(s)} rounded-full`} style={{ width: `${s}%` }} /></div>
                                                         </div>
-                                                    ) : <p className="text-xs text-slate-400 text-center py-8">Transcript unavailable</p>}
+                                                    ); })}
+                                                </div>
+                                            </div>
+                                            {ev?.ai_summary && (
+                                                <div className="bg-gradient-to-br from-slate-50 to-white rounded-2xl border border-slate-200/80 p-5">
+                                                    <div className="flex items-center gap-2 mb-3"><span className="material-symbols-outlined text-primary text-[18px]">auto_awesome</span><span className="text-xs font-black text-slate-800 uppercase tracking-widest">AI Analysis</span></div>
+                                                    <p className="text-sm text-slate-600 leading-relaxed">{ev.ai_summary}</p>
                                                 </div>
                                             )}
+                                            <div className="border border-slate-200/80 rounded-2xl overflow-hidden">
+                                                <button className="w-full flex items-center justify-between px-5 py-3.5 bg-white hover:bg-slate-50/60 transition-colors" onClick={() => setShowTranscript(!showTranscript)}>
+                                                    <div className="flex items-center gap-2"><span className="material-symbols-outlined text-primary text-[18px]">chat_bubble_outline</span><span className="text-xs font-black text-slate-800 uppercase tracking-widest">Interview Transcript</span></div>
+                                                    <span className={`material-symbols-outlined text-slate-400 text-[18px] transition-transform duration-200 ${showTranscript ? 'rotate-180' : ''}`}>expand_more</span>
+                                                </button>
+                                                {showTranscript && (
+                                                    <div className="border-t border-slate-100 p-3 bg-white">
+                                                        {transcript?.full_transcript?.length > 0 ? (
+                                                            <div className="max-h-64 overflow-y-auto space-y-3 p-2 custom-scrollbar">
+                                                                {transcript.full_transcript.map((turn: any, i: number) => {
+                                                                    const isAI = turn.role?.toLowerCase() === 'interviewer';
+                                                                    return (
+                                                                        <div key={i} className={`flex ${isAI ? 'justify-start' : 'justify-end'}`}>
+                                                                            <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs shadow-sm ${isAI ? 'bg-slate-50 text-slate-900 border border-slate-100 rounded-tl-none' : 'bg-primary text-white rounded-tr-none'}`}>
+                                                                                <p className={`text-[8px] font-black uppercase tracking-widest mb-1 ${isAI ? 'text-primary' : 'text-white/60'}`}>{isAI ? 'AI Interviewer' : 'Candidate'}</p>
+                                                                                <p className="font-medium leading-relaxed">{turn.text || turn.content}</p>
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        ) : <p className="text-xs text-slate-400 text-center py-8">Transcript unavailable</p>}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                );
-                            })()}
-                        </div>
+                                    );
+                                })()}
+                            </div>
+                        )}
                     </div>
                 )}
             </Modal>
+
+            {/* Delete Confirmation Modal */}
+            <DeleteConfirmModal
+                candidate={deleteTarget}
+                onConfirm={confirmDelete}
+                onClose={() => !deleting && setDeleteTarget(null)}
+                deleting={deleting}
+            />
         </div>
     );
 }
