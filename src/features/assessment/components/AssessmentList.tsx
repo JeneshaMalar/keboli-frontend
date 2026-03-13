@@ -26,7 +26,7 @@ function parseJobDescription(jd: string): Array<{ heading?: string; items: strin
 
   for (const line of lines) {
     const isHeading =
-      /^[A-Z][A-Z\s&/()-]{3,}:?$/.test(line) ||   
+      /^[A-Z][A-Z\s&/()-]{3,}:?$/.test(line) ||
       (line.endsWith(':') && line.length < 60 && !bulletRe.test(line));
 
     if (isHeading) {
@@ -246,6 +246,90 @@ function SkillGraphViewer({ skillGraph }: { skillGraph: unknown }) {
   );
 }
 
+// ─── Delete Confirm Modal ─────────────────────────────────────────────────────
+
+function DeleteConfirmModal({ assessment, onConfirm, onClose, deleting }: {
+  assessment: AssessmentResponse | null;
+  onConfirm: () => void;
+  onClose: () => void;
+  deleting: boolean;
+}) {
+  if (!assessment) return null;
+
+  const getDifficultyLabel = (level: string) => {
+    switch (level) {
+      case 'hard':   return 'Expert';
+      case 'medium': return 'Professional';
+      default:       return 'Elementary';
+    }
+  };
+
+  return (
+    <Modal isOpen={!!assessment} onClose={onClose} title="" size="sm">
+      <div className="flex flex-col items-center text-center gap-4 py-2">
+
+        {/* Icon */}
+        <div className="size-14 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center">
+          <span className="material-symbols-outlined text-rose-500 text-[28px]">delete_forever</span>
+        </div>
+
+        {/* Copy */}
+        <div>
+          <p className="text-base font-black text-slate-900 mb-1">Delete assessment?</p>
+          <p className="text-sm text-slate-500 font-medium leading-relaxed">
+            <span className="font-bold text-slate-700">{assessment.title}</span> will be permanently
+            removed. All associated invitations and sessions will be affected. This cannot be undone.
+          </p>
+        </div>
+
+        {/* Assessment pill */}
+        <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl w-full text-left">
+          <div className="size-9 rounded-xl bg-gradient-to-br from-rose-100 to-rose-50 border border-rose-100 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-rose-400 text-[18px]">quiz</span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold text-slate-800 truncate">{assessment.title}</p>
+            <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+              {assessment.duration_minutes}m · {assessment.passing_score}% pass · {getDifficultyLabel(assessment.difficulty_level)}
+            </p>
+          </div>
+          <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg border ${
+            assessment.is_active
+              ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+              : 'bg-slate-100 text-slate-400 border-slate-200'
+          }`}>
+            {assessment.is_active ? 'Active' : 'Draft'}
+          </span>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2.5 w-full">
+          <Button
+            variant="secondary"
+            onClick={onClose}
+            disabled={deleting}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold rounded-xl transition-all shadow-sm shadow-rose-200 active:scale-[0.97] disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {deleting
+              ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Deleting…</>
+              : <><span className="material-symbols-outlined text-[16px]">delete</span>Yes, Delete</>
+            }
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 export default function AssessmentList({
   assessments,
   onEdit,
@@ -258,6 +342,10 @@ export default function AssessmentList({
   const [editedSkillGraph, setEditedSkillGraph] = useState('');
   const [jsonError, setJsonError] = useState('');
   const [activeTab, setActiveTab] = useState<'jd' | 'skills'>('jd');
+
+  // ── Delete confirmation state ───────────────────────────────────────────────
+  const [deleteTarget, setDeleteTarget] = useState<AssessmentResponse | null>(null);
+  const [deleting, setDeleting]         = useState(false);
 
   const itemsPerPage = 9;
   const totalPages = Math.ceil(assessments.length / itemsPerPage);
@@ -285,6 +373,22 @@ export default function AssessmentList({
       setIsEditingSkillGraph(false);
     } catch {
       setJsonError('Invalid JSON — please fix the syntax before saving.');
+    }
+  };
+
+  // ── Delete handlers ─────────────────────────────────────────────────────────
+  const handleDeleteClick = (assessment: AssessmentResponse) => {
+    setDeleteTarget(assessment);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await onDelete(deleteTarget.id);
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -379,10 +483,11 @@ export default function AssessmentList({
                   >
                     <span className="material-symbols-outlined text-[18px]">edit</span>
                   </button>
+                  {/* Opens confirmation modal instead of calling onDelete directly */}
                   <button
-                    onClick={() => onDelete(assessment.id)}
+                    onClick={() => handleDeleteClick(assessment)}
                     className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                    title="Delete/Deactivate"
+                    title="Delete Assessment"
                   >
                     <span className="material-symbols-outlined text-[18px]">delete</span>
                   </button>
@@ -412,6 +517,7 @@ export default function AssessmentList({
         />
       </div>
 
+      {/* Assessment Details Modal — unchanged */}
       <Modal
         isOpen={!!selectedAssessment}
         onClose={() => setSelectedAssessment(null)}
@@ -544,6 +650,14 @@ export default function AssessmentList({
           </div>
         )}
       </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        assessment={deleteTarget}
+        onConfirm={confirmDelete}
+        onClose={() => !deleting && setDeleteTarget(null)}
+        deleting={deleting}
+      />
     </div>
   );
 }
