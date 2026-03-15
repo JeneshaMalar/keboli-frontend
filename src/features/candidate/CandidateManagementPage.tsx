@@ -13,7 +13,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Pagination from '../../components/ui/Pagination';
 import { invitationService, InvitationStatus } from './services/invitationService';
-import { apiClient } from '../../services/apiClient';
+import api from '../../lib/axios';
 
 // ─── Status helpers ──────────────────────────────────────────────────────────
 
@@ -389,7 +389,7 @@ export default function CandidateManagementPage() {
         setEvalLoading(true);
         setEvalReport(null);
         setShowTranscript(false);
-        apiClient.get(`/evaluation/report/${activeReportSessionId}`)
+        api.get(`/evaluation/report/${activeReportSessionId}`)
             .then((r: { data: any }) => setEvalReport(r.data))
             .catch(() => setEvalReport(null))
             .finally(() => setEvalLoading(false));
@@ -527,9 +527,9 @@ export default function CandidateManagementPage() {
     const handleGenerateReport = async (sessionId: string) => {
         setTriggeringEval(true);
         try {
-            await apiClient.post(`/evaluation/trigger/${sessionId}`);
+            await api.post(`/evaluation/trigger/${sessionId}`);
             setTimeout(() => {
-                apiClient.get(`/evaluation/report/${sessionId}`)
+                api.get(`/evaluation/report/${sessionId}`)
                     .then((r: { data: any }) => setEvalReport(r.data)).catch(() => setEvalReport(null)).finally(() => setTriggeringEval(false));
             }, 3000);
         } catch { alert("Failed to trigger evaluation."); setTriggeringEval(false); }
