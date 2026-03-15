@@ -124,8 +124,24 @@ const WaveBars = ({ active, color }: { active: boolean; color: string }) => {
 };
 
 /* ── Arc Timer ────────────────────────────────────────────────────────────── */
-const Timer = ({ durationMinutes, onTimeUp }: { durationMinutes: number; onTimeUp: () => void }) => {
+const Timer = ({
+  durationMinutes, onTimeUp, syncedSecs,
+}: {
+  durationMinutes: number;
+  onTimeUp: () => void;
+  /** When provided, overrides internal counter (server-authoritative remaining seconds) */
+  syncedSecs?: number;
+}) => {
   const [secs, setSecs] = useState(durationMinutes * 60);
+
+  // Sync from server whenever syncedSecs changes
+  useEffect(() => {
+    if (syncedSecs !== undefined) {
+      setSecs(syncedSecs);
+    }
+  }, [syncedSecs]);
+
+  // Local 1-second countdown (runs between server syncs for smooth display)
   useEffect(() => {
     if (secs <= 0) { onTimeUp(); return; }
     const t = setInterval(() => setSecs(p => p - 1), 1000);
@@ -268,6 +284,8 @@ const InterviewStage: React.FC<{
   const [timeUp, setTimeUp] = useState(false);
   const [buffer, setBuffer] = useState(120);
   const [dbTx, setDbTx] = useState<any[]>([]);
+  /** Server-authoritative remaining seconds, synced from timer_sync messages */
+  const [serverRemainingSeconds, setServerRemainingSeconds] = useState<number | undefined>(undefined);
 
   const speaking = va.state === 'speaking';
   const listening = va.state === 'listening';
@@ -295,7 +313,7 @@ const InterviewStage: React.FC<{
     return () => clearInterval(id);
   }, [sessionId, online]);
 
-  // ── Listen for interview_ended data message from backend (Approach A) ──
+  // ── Listen for interview_ended / timer_sync data messages from backend ──
   const interviewEndedRef = useRef(false);
   useEffect(() => {
     if (!room || !online) return;
@@ -303,11 +321,19 @@ const InterviewStage: React.FC<{
     const handleDataReceived = (payload: Uint8Array, _participant: any, _kind: any, topic?: string) => {
       // Only process messages on the interview_control topic
       if (topic !== 'interview_control') return;
-      if (interviewEndedRef.current) return; // Already handled
 
       try {
         const data = JSON.parse(new TextDecoder().decode(payload));
+
+        // ── Timer sync: keep frontend timer in lock-step with agent clock ──
+        if (data.type === 'timer_sync' && typeof data.remaining_seconds === 'number') {
+          setServerRemainingSeconds(data.remaining_seconds);
+          return;
+        }
+
+        // ── Interview ended signal ──
         if (data.type === 'interview_ended' && data.auto_submit) {
+          if (interviewEndedRef.current) return; // Already handled
           interviewEndedRef.current = true;
           console.log(`[Interview] Received interview_ended signal (reason=${data.reason}). Auto-submitting in 3s...`);
           // Brief delay so candidate can see/hear the closing message
@@ -404,7 +430,7 @@ const InterviewStage: React.FC<{
 
           {/* Center strip */}
           <div className="flex items-center gap-5">
-            <Timer durationMinutes={duration} onTimeUp={() => setTimeUp(true)} />
+            <Timer durationMinutes={duration} onTimeUp={() => setTimeUp(true)} syncedSecs={serverRemainingSeconds} />
 
             {/* Vertical rule */}
             <div className="h-8 w-px" style={{ background: 'var(--border)' }} />
