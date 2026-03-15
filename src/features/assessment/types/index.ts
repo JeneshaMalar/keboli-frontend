@@ -24,4 +24,5 @@ export interface AssessmentResponse extends AssessmentBase {
   org_id: string;
   created_at: string;
   updated_at: string;
+  display_id?: string;
 }

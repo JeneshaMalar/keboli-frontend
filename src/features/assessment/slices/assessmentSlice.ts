@@ -71,6 +71,30 @@ export const deleteAssessment = createAsyncThunk(
   }
 );
 
+function assignDisplayIds(assessments: AssessmentResponse[]): AssessmentResponse[] {
+  const chronological = [...assessments].sort((a, b) =>
+    new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+  );
+
+  const sequenceMap: Record<string, number> = {};
+  const withDisplayIds = chronological.map(a => {
+    const date = new Date(a.created_at || new Date());
+    const dateStr = date.toISOString().split('T')[0].replace(/-/g, '');
+    const titleSlug = a.title.toUpperCase().replace(/[^A-Z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+
+    const key = `${titleSlug}-${dateStr}`;
+    sequenceMap[key] = (sequenceMap[key] || 0) + 1;
+    const sequenceStr = String(sequenceMap[key]).padStart(2, '0');
+
+    return {
+      ...a,
+      display_id: `${titleSlug}-${dateStr}-${sequenceStr}`
+    };
+  });
+
+  return withDisplayIds.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+}
+
 const assessmentSlice = createSlice({
   name: 'assessment',
   initialState,
@@ -91,7 +115,7 @@ const assessmentSlice = createSlice({
       })
       .addCase(fetchAssessments.fulfilled, (state, action) => {
         state.loading = false;
-        state.assessments = action.payload;
+        state.assessments = assignDisplayIds(action.payload);
       })
       .addCase(fetchAssessments.rejected, (state, action) => {
         state.loading = false;
@@ -99,7 +123,7 @@ const assessmentSlice = createSlice({
       })
       // Create Assessment
       .addCase(createAssessment.fulfilled, (state, action) => {
-        state.assessments.unshift(action.payload);
+        state.assessments = assignDisplayIds([...state.assessments, action.payload]);
       })
       // Update Assessment
       .addCase(updateAssessment.fulfilled, (state, action) => {
@@ -107,8 +131,9 @@ const assessmentSlice = createSlice({
         if (index !== -1) {
           state.assessments[index] = action.payload;
         }
+        state.assessments = assignDisplayIds(state.assessments);
         if (state.currentAssessment?.id === action.payload.id) {
-          state.currentAssessment = action.payload;
+          state.currentAssessment = state.assessments.find(a => a.id === action.payload.id) || null;
         }
       })
       // Toggle Status
@@ -117,6 +142,7 @@ const assessmentSlice = createSlice({
         if (index !== -1) {
           state.assessments[index] = action.payload;
         }
+        state.assessments = assignDisplayIds(state.assessments);
       })
       // Delete Assessment (Soft Delete)
       .addCase(deleteAssessment.fulfilled, (state, action) => {
@@ -124,6 +150,7 @@ const assessmentSlice = createSlice({
         if (index !== -1) {
           state.assessments[index] = action.payload as AssessmentResponse;
         }
+        state.assessments = assignDisplayIds(state.assessments);
       });
   },
 });
