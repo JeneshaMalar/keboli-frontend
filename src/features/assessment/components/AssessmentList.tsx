@@ -54,14 +54,14 @@ function parseJobDescription(jd: string): Array<{ heading?: string; items: strin
 
 function colorFromString(str: string): { bg: string; text: string; border: string } {
   const palettes = [
-    { bg: 'bg-indigo-50',   text: 'text-indigo-600',   border: 'border-indigo-200/80' },
-    { bg: 'bg-cyan-50',     text: 'text-cyan-600',     border: 'border-cyan-200/80' },
-    { bg: 'bg-amber-50',    text: 'text-amber-600',    border: 'border-amber-200/80' },
-    { bg: 'bg-violet-50',   text: 'text-violet-600',   border: 'border-violet-200/80' },
-    { bg: 'bg-emerald-50',  text: 'text-emerald-600',  border: 'border-emerald-200/80' },
-    { bg: 'bg-rose-50',     text: 'text-rose-600',     border: 'border-rose-200/80' },
-    { bg: 'bg-sky-50',      text: 'text-sky-600',      border: 'border-sky-200/80' },
-    { bg: 'bg-orange-50',   text: 'text-orange-600',   border: 'border-orange-200/80' },
+    { bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200/80' },
+    { bg: 'bg-cyan-50', text: 'text-cyan-600', border: 'border-cyan-200/80' },
+    { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200/80' },
+    { bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200/80' },
+    { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200/80' },
+    { bg: 'bg-rose-50', text: 'text-rose-600', border: 'border-rose-200/80' },
+    { bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200/80' },
+    { bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-200/80' },
   ];
 
   const hash = (str || '').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
@@ -258,9 +258,9 @@ function DeleteConfirmModal({ assessment, onConfirm, onClose, deleting }: {
 
   const getDifficultyLabel = (level: string) => {
     switch (level) {
-      case 'hard':   return 'Expert';
+      case 'hard': return 'Expert';
       case 'medium': return 'Professional';
-      default:       return 'Elementary';
+      default: return 'Elementary';
     }
   };
 
@@ -289,15 +289,17 @@ function DeleteConfirmModal({ assessment, onConfirm, onClose, deleting }: {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold text-slate-800 truncate">{assessment.title}</p>
+            {assessment.display_id && (
+              <p className="text-[10px] font-mono text-slate-400 mt-0.5">{assessment.display_id}</p>
+            )}
             <p className="text-[10px] text-slate-400 font-medium mt-0.5">
               {assessment.duration_minutes}m · {assessment.passing_score}% pass · {getDifficultyLabel(assessment.difficulty_level)}
             </p>
           </div>
-          <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg border ${
-            assessment.is_active
+          <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg border ${assessment.is_active
               ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
               : 'bg-slate-100 text-slate-400 border-slate-200'
-          }`}>
+            }`}>
             {assessment.is_active ? 'Active' : 'Draft'}
           </span>
         </div>
@@ -345,7 +347,7 @@ export default function AssessmentList({
 
   // ── Delete confirmation state ───────────────────────────────────────────────
   const [deleteTarget, setDeleteTarget] = useState<AssessmentResponse | null>(null);
-  const [deleting, setDeleting]         = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const itemsPerPage = 9;
   const totalPages = Math.ceil(assessments.length / itemsPerPage);
@@ -394,9 +396,9 @@ export default function AssessmentList({
 
   const getDifficultyConfig = (level: string) => {
     switch (level) {
-      case 'hard':   return { label: 'Expert',        color: 'bg-rose-50 text-rose-600 border-rose-200/80' };
-      case 'medium': return { label: 'Professional',  color: 'bg-amber-50 text-amber-600 border-amber-200/80' };
-      default:       return { label: 'Elementary',    color: 'bg-emerald-50 text-emerald-600 border-emerald-200/80' };
+      case 'hard': return { label: 'Expert', color: 'bg-rose-50 text-rose-600 border-rose-200/80' };
+      case 'medium': return { label: 'Professional', color: 'bg-amber-50 text-amber-600 border-amber-200/80' };
+      default: return { label: 'Elementary', color: 'bg-emerald-50 text-emerald-600 border-emerald-200/80' };
     }
   };
 
@@ -427,9 +429,16 @@ export default function AssessmentList({
             >
               {/* Card Header */}
               <div className="flex items-start justify-between mb-3 gap-3">
-                <h3 className="text-base font-bold text-slate-900 group-hover:text-primary transition-colors line-clamp-1 leading-snug">
-                  {assessment.title}
-                </h3>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base font-bold text-slate-900 group-hover:text-primary transition-colors line-clamp-1 leading-snug">
+                    {assessment.title}
+                  </h3>
+                  {assessment.display_id && (
+                    <p className="text-[11px] font-mono text-slate-500 mt-1.5 uppercase tracking-wider bg-slate-50 inline-block px-1.5 py-0.5 rounded border border-slate-100">
+                      {assessment.display_id}
+                    </p>
+                  )}
+                </div>
                 <span className={`flex-shrink-0 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-lg border ${difficulty.color}`}>
                   {difficulty.label}
                 </span>
@@ -454,11 +463,10 @@ export default function AssessmentList({
                 <div className="ml-auto">
                   <button
                     onClick={() => onToggleStatus(assessment.id, !assessment.is_active)}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
-                      assessment.is_active
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${assessment.is_active
                         ? 'bg-emerald-500 text-white shadow-sm'
                         : 'bg-slate-100 text-slate-400 border border-slate-200'
-                    }`}
+                      }`}
                   >
                     <span className={`w-1.5 h-1.5 rounded-full ${assessment.is_active ? 'bg-white animate-pulse' : 'bg-slate-300'}`} />
                     {assessment.is_active ? 'Active' : 'Draft'}
@@ -534,11 +542,17 @@ export default function AssessmentList({
       >
         {selectedAssessment && (
           <div className="space-y-5 py-2">
+            <div>
+              <h3 className="text-xl font-bold text-slate-900">{selectedAssessment.title}</h3>
+              {selectedAssessment.display_id && (
+                <p className="text-sm font-mono text-slate-500 mt-1">{selectedAssessment.display_id}</p>
+              )}
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { label: 'Duration',   value: `${selectedAssessment.duration_minutes}m` },
+                { label: 'Duration', value: `${selectedAssessment.duration_minutes}m` },
                 { label: 'Pass Score', value: `${selectedAssessment.passing_score}%` },
-                { label: 'Attempts',   value: selectedAssessment.max_attempts },
+                { label: 'Attempts', value: selectedAssessment.max_attempts },
                 { label: 'Difficulty', value: selectedAssessment.difficulty_level, isBadge: true },
               ].map((stat) => (
                 <div key={stat.label} className="p-4 bg-slate-50/80 rounded-xl border border-slate-100">
@@ -546,8 +560,8 @@ export default function AssessmentList({
                   {stat.isBadge ? (
                     <Badge
                       variant={
-                        selectedAssessment.difficulty_level === 'hard'   ? 'error'   :
-                        selectedAssessment.difficulty_level === 'medium' ? 'warning' : 'success'
+                        selectedAssessment.difficulty_level === 'hard' ? 'error' :
+                          selectedAssessment.difficulty_level === 'medium' ? 'warning' : 'success'
                       }
                       className="mt-0.5"
                     >
@@ -564,11 +578,10 @@ export default function AssessmentList({
               <div className="flex border-b border-slate-100 bg-slate-50/60">
                 <button
                   onClick={() => setActiveTab('jd')}
-                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-[11px] font-bold uppercase tracking-wider transition-all ${
-                    activeTab === 'jd'
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-[11px] font-bold uppercase tracking-wider transition-all ${activeTab === 'jd'
                       ? 'text-primary border-b-2 border-primary bg-white'
                       : 'text-slate-400 hover:text-slate-600'
-                  }`}
+                    }`}
                 >
                   <span className="material-symbols-outlined text-[15px]">description</span>
                   Job Description
@@ -576,11 +589,10 @@ export default function AssessmentList({
                 {selectedAssessment.skill_graph && (
                   <button
                     onClick={() => setActiveTab('skills')}
-                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-[11px] font-bold uppercase tracking-wider transition-all ${
-                      activeTab === 'skills'
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-[11px] font-bold uppercase tracking-wider transition-all ${activeTab === 'skills'
                         ? 'text-primary border-b-2 border-primary bg-white'
                         : 'text-slate-400 hover:text-slate-600'
-                    }`}
+                      }`}
                   >
                     <span className="material-symbols-outlined text-[15px]">schema</span>
                     Skill Graph
@@ -617,9 +629,8 @@ export default function AssessmentList({
                       <div className="space-y-3 animate-in fade-in duration-300">
                         <div className="relative">
                           <textarea
-                            className={`w-full bg-slate-900 text-emerald-400 font-mono text-xs p-5 rounded-xl border min-h-[200px] outline-none focus:ring-2 focus:ring-primary/20 resize-none transition-all ${
-                              jsonError ? 'border-rose-500' : 'border-slate-700'
-                            }`}
+                            className={`w-full bg-slate-900 text-emerald-400 font-mono text-xs p-5 rounded-xl border min-h-[200px] outline-none focus:ring-2 focus:ring-primary/20 resize-none transition-all ${jsonError ? 'border-rose-500' : 'border-slate-700'
+                              }`}
                             value={editedSkillGraph}
                             onChange={(e) => {
                               setEditedSkillGraph(e.target.value);

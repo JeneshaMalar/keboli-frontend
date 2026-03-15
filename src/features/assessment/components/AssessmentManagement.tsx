@@ -34,7 +34,8 @@ const AssessmentManagement: React.FC = () => {
     if (searchTerm) {
       result = result.filter(a =>
         a.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        a.job_description.toLowerCase().includes(searchTerm.toLowerCase())
+        a.job_description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (a.display_id && a.display_id.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
 

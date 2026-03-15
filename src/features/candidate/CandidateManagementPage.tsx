@@ -18,11 +18,11 @@ import { apiClient } from '../../services/apiClient';
 // ─── Status helpers ──────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { bg: string; text: string; dot: string; border: string; label: string }> = {
-    COMPLETED: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500', border: 'border-emerald-200', label: 'Completed'   },
-    CLICKED:   { bg: 'bg-sky-50',     text: 'text-sky-700',     dot: 'bg-sky-500',     border: 'border-sky-200',     label: 'Clicked'     },
-    SENT:      { bg: 'bg-indigo-50',  text: 'text-indigo-700',  dot: 'bg-indigo-500',  border: 'border-indigo-200',  label: 'Sent'        },
-    EXPIRED:   { bg: 'bg-rose-50',    text: 'text-rose-700',    dot: 'bg-rose-400',    border: 'border-rose-200',    label: 'Expired'     },
-    DEFAULT:   { bg: 'bg-slate-100',  text: 'text-slate-500',   dot: 'bg-slate-300',   border: 'border-slate-200',   label: 'Not Invited' },
+    COMPLETED: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500', border: 'border-emerald-200', label: 'Completed' },
+    CLICKED: { bg: 'bg-sky-50', text: 'text-sky-700', dot: 'bg-sky-500', border: 'border-sky-200', label: 'Clicked' },
+    SENT: { bg: 'bg-indigo-50', text: 'text-indigo-700', dot: 'bg-indigo-500', border: 'border-indigo-200', label: 'Sent' },
+    EXPIRED: { bg: 'bg-rose-50', text: 'text-rose-700', dot: 'bg-rose-400', border: 'border-rose-200', label: 'Expired' },
+    DEFAULT: { bg: 'bg-slate-100', text: 'text-slate-500', dot: 'bg-slate-300', border: 'border-slate-200', label: 'Not Invited' },
 };
 
 function getStatusConfig(status?: string) {
@@ -48,11 +48,10 @@ function Checkbox({ checked, indeterminate, onChange }: { checked: boolean; inde
     return (
         <button
             onClick={e => { e.stopPropagation(); onChange(); }}
-            className={`size-[18px] rounded-[5px] flex items-center justify-center border-2 transition-all shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/30 ${
-                checked || indeterminate
-                    ? 'bg-primary border-primary shadow-sm'
-                    : 'bg-white border-slate-300 hover:border-primary/60'
-            }`}
+            className={`size-[18px] rounded-[5px] flex items-center justify-center border-2 transition-all shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/30 ${checked || indeterminate
+                ? 'bg-primary border-primary shadow-sm'
+                : 'bg-white border-slate-300 hover:border-primary/60'
+                }`}
         >
             {indeterminate && !checked
                 ? <span className="w-2 h-[2px] bg-white rounded-full block" />
@@ -205,7 +204,7 @@ function BulkInviteModal({ isOpen, onClose, selectedCandidates, assessments, inv
                     <select className="w-full bg-slate-50 border border-slate-200 text-sm font-semibold rounded-xl p-3 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition-all"
                         value={assessmentId} onChange={e => setAssessmentId(e.target.value)}>
                         <option value="">Choose an assessment…</option>
-                        {activeAssessments.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+                        {activeAssessments.map(a => <option key={a.id} value={a.id}>{a.title}{a.display_id ? ` (${a.display_id})` : ''}</option>)}
                     </select>
                     {alreadySentCount > 0 && (
                         <div className="flex items-start gap-2 mt-2.5 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
@@ -288,7 +287,7 @@ function SendAssessmentModal({ isOpen, onClose, candidate, assessments, existing
                     <select className="w-full bg-slate-50 border border-slate-200 text-sm font-semibold rounded-xl p-3 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition-all"
                         value={assessmentId} onChange={e => setAssessmentId(e.target.value)}>
                         <option value="">Choose an assessment…</option>
-                        {available.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+                        {available.map(a => <option key={a.id} value={a.id}>{a.title}{a.display_id ? ` (${a.display_id})` : ''}</option>)}
                     </select>
                     {assessmentId && alreadySentIds.has(assessmentId) && (
                         <div className="flex items-start gap-2 mt-2.5 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
@@ -322,33 +321,33 @@ export default function CandidateManagementPage() {
     const { candidates, invitations, loading } = useSelector((state: RootState) => state.candidate);
     const { assessments } = useSelector((state: RootState) => state.assessment);
 
-    const [search, setSearch]                 = useState('');
-    const [statusFilter, setStatusFilter]     = useState('All');
+    const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState('All');
     const [assessmentFilter, setAssessmentFilter] = useState('All');
-    const [currentPage, setCurrentPage]       = useState(1);
+    const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
     // ── Selection ──────────────────────────────────────────────────────────────
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
     // ── Modals ────────────────────────────────────────────────────────────────
-    const [showAddModal, setShowAddModal]       = useState(false);
+    const [showAddModal, setShowAddModal] = useState(false);
     const [showInviteModal, setShowInviteModal] = useState(false);
-    const [showSendModal, setShowSendModal]     = useState(false);
-    const [showBulkModal, setShowBulkModal]     = useState(false);
+    const [showSendModal, setShowSendModal] = useState(false);
+    const [showBulkModal, setShowBulkModal] = useState(false);
     const [selectedForSend, setSelectedForSend] = useState<any>(null);
     const [selectedCandidate, setSelectedCandidate] = useState<any>(null);
 
     // Gen-link
     const [genLinkMode, setGenLinkMode] = useState<'single' | 'bulk'>('single');
     const [genLinkFile, setGenLinkFile] = useState<File | null>(null);
-    const [generating, setGenerating]   = useState(false);
-    const [addForm, setAddForm]         = useState({ name: '', email: '', resume_url: '' });
-    const [inviteForm, setInviteForm]   = useState({ assessment_id: '', expires_in_hours: 48 });
+    const [generating, setGenerating] = useState(false);
+    const [addForm, setAddForm] = useState({ name: '', email: '', resume_url: '' });
+    const [inviteForm, setInviteForm] = useState({ assessment_id: '', expires_in_hours: 48 });
 
     // Eval
-    const [evalReport, setEvalReport]         = useState<any>(null);
-    const [evalLoading, setEvalLoading]       = useState(false);
+    const [evalReport, setEvalReport] = useState<any>(null);
+    const [evalLoading, setEvalLoading] = useState(false);
     const [showTranscript, setShowTranscript] = useState(false);
     const [triggeringEval, setTriggeringEval] = useState(false);
 
@@ -357,7 +356,7 @@ export default function CandidateManagementPage() {
 
     // ── Delete confirmation modal ─────────────────────────────────────────────
     const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
-    const [deleting, setDeleting]         = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     const location = useLocation();
 
@@ -410,6 +409,7 @@ export default function CandidateManagementPage() {
             latest_session_id: (latest as any)?.latest_session_id,
             latest_session_status: (latest as any)?.latest_session_status,
             latest_assessment_title: linked?.title,
+            latest_assessment_display_id: linked?.display_id,
             score: (latest as any)?.total_score,
             recommendation: (latest as any)?.hiring_recommendation,
         };
@@ -423,21 +423,21 @@ export default function CandidateManagementPage() {
         return data;
     }, [unifiedData, search, statusFilter, assessmentFilter]);
 
-    const totalPages     = Math.ceil(filteredData.length / itemsPerPage);
+    const totalPages = Math.ceil(filteredData.length / itemsPerPage);
     const paginatedItems = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     const stats = useMemo(() => ({
-        total:     unifiedData.length,
+        total: unifiedData.length,
         completed: unifiedData.filter((c: any) => c.latest_status?.toUpperCase() === 'COMPLETED').length,
-        pending:   unifiedData.filter((c: any) => c.latest_status?.toUpperCase() === 'SENT').length,
-        noInvite:  unifiedData.filter((c: any) => !c.latest_status).length,
+        pending: unifiedData.filter((c: any) => c.latest_status?.toUpperCase() === 'SENT').length,
+        noInvite: unifiedData.filter((c: any) => !c.latest_status).length,
     }), [unifiedData]);
 
     // ── Selection helpers ─────────────────────────────────────────────────────
 
-    const pageIds          = paginatedItems.map((c: any) => c.id);
-    const selectedOnPage   = pageIds.filter((id: string) => selectedIds.has(id));
-    const allPageSelected  = pageIds.length > 0 && selectedOnPage.length === pageIds.length;
+    const pageIds = paginatedItems.map((c: any) => c.id);
+    const selectedOnPage = pageIds.filter((id: string) => selectedIds.has(id));
+    const allPageSelected = pageIds.length > 0 && selectedOnPage.length === pageIds.length;
     const somePageSelected = selectedOnPage.length > 0 && !allPageSelected;
 
     const toggleOne = (id: string) => setSelectedIds(prev => {
@@ -560,10 +560,10 @@ export default function CandidateManagementPage() {
 
             {/* Stats */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard label="Total Candidates" value={stats.total}     icon="group"          color="bg-yellow-500" />
-                <StatCard label="Completed"         value={stats.completed} icon="task_alt"        color="bg-green-500" />
-                <StatCard label="Awaiting Response" value={stats.pending}   icon="pending_actions" color="bg-blue-400" />
-                <StatCard label="Not Invited"       value={stats.noInvite}  icon="mail_off"        color="bg-gray-400" />
+                <StatCard label="Total Candidates" value={stats.total} icon="group" color="bg-yellow-500" />
+                <StatCard label="Completed" value={stats.completed} icon="task_alt" color="bg-green-500" />
+                <StatCard label="Awaiting Response" value={stats.pending} icon="pending_actions" color="bg-blue-400" />
+                <StatCard label="Not Invited" value={stats.noInvite} icon="mail_off" color="bg-gray-400" />
             </div>
 
             {/* Filters */}
@@ -586,7 +586,7 @@ export default function CandidateManagementPage() {
                     <select className="bg-slate-50 border border-slate-200 text-xs font-bold text-slate-600 rounded-xl py-2.5 pl-3.5 pr-8 outline-none cursor-pointer hover:border-slate-300 transition-all max-w-[180px]"
                         value={assessmentFilter} onChange={e => { setAssessmentFilter(e.target.value); setCurrentPage(1); }}>
                         <option value="All">All Assessments</option>
-                        {assessments.map(a => <option key={a.id} value={a.title}>{a.title}</option>)}
+                        {assessments.map(a => <option key={a.id} value={a.title}>{a.title}{a.display_id ? ` (${a.display_id})` : ''}</option>)}
                     </select>
                     {(search || statusFilter !== 'All' || assessmentFilter !== 'All') && (
                         <button onClick={() => { setSearch(''); setStatusFilter('All'); setAssessmentFilter('All'); setCurrentPage(1); }}
@@ -665,8 +665,8 @@ export default function CandidateManagementPage() {
                                     </div>
                                 </td></tr>
                             ) : paginatedItems.map((c: any) => {
-                                const statusCfg  = getStatusConfig(c.latest_status);
-                                const hasScore   = c.score !== null && c.score !== undefined;
+                                const statusCfg = getStatusConfig(c.latest_status);
+                                const hasScore = c.score !== null && c.score !== undefined;
                                 const isSelected = selectedIds.has(c.id);
                                 return (
                                     <tr key={c.id} className={`transition-colors group ${isSelected ? 'bg-primary/[0.025]' : 'hover:bg-slate-50/60'}`}>
@@ -696,7 +696,14 @@ export default function CandidateManagementPage() {
                                         {/* Assessment */}
                                         <td className="px-5 py-4">
                                             {c.latest_assessment_title
-                                                ? <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">{c.latest_assessment_title}</span>
+                                                ? (
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg w-max">{c.latest_assessment_title}</span>
+                                                        {c.latest_assessment_display_id && (
+                                                            <span className="text-[10px] font-mono text-slate-400 pl-1">{c.latest_assessment_display_id}</span>
+                                                        )}
+                                                    </div>
+                                                )
                                                 : <span className="text-slate-300 text-xs">—</span>}
                                         </td>
 
@@ -782,7 +789,7 @@ export default function CandidateManagementPage() {
                         <select className="w-full bg-slate-50 border border-slate-200 text-sm font-semibold rounded-xl p-3 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition-all"
                             value={inviteForm.assessment_id} onChange={e => setInviteForm(p => ({ ...p, assessment_id: e.target.value }))}>
                             <option value="">Select an assessment…</option>
-                            {assessments.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+                            {assessments.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.title}{a.display_id ? ` (${a.display_id})` : ''}</option>)}
                         </select>
                     </div>
                     <div>
@@ -874,11 +881,10 @@ export default function CandidateManagementPage() {
                                         const sessionId: string | undefined = (inv as any)?.latest_session_id;
                                         const isActiveSession = !!sessionId && activeReportSessionId === sessionId;
                                         return (
-                                            <div key={inv.id} className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${
-                                                isActiveSession
-                                                    ? 'bg-primary/[0.04] border-primary/30 ring-1 ring-primary/20'
-                                                    : idx === 0 ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100'
-                                            }`}>
+                                            <div key={inv.id} className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${isActiveSession
+                                                ? 'bg-primary/[0.04] border-primary/30 ring-1 ring-primary/20'
+                                                : idx === 0 ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100'
+                                                }`}>
                                                 <div className="flex items-center gap-3">
                                                     <span className={`size-8 rounded-lg flex items-center justify-center ${cfg.bg} border ${cfg.border}`}><span className={`size-2 rounded-full ${cfg.dot}`} /></span>
                                                     <div>
@@ -895,11 +901,10 @@ export default function CandidateManagementPage() {
                                                         <button
                                                             onClick={() => setActiveReportSessionId(isActiveSession ? null : sessionId)}
                                                             title={isActiveSession ? 'Collapse report' : 'View report for this session'}
-                                                            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
-                                                                isActiveSession
-                                                                    ? 'bg-primary text-white border-primary shadow-sm'
-                                                                    : 'bg-white text-primary border-primary/30 hover:bg-primary/5'
-                                                            }`}
+                                                            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${isActiveSession
+                                                                ? 'bg-primary text-white border-primary shadow-sm'
+                                                                : 'bg-white text-primary border-primary/30 hover:bg-primary/5'
+                                                                }`}
                                                         >
                                                             <span className="material-symbols-outlined text-[13px]">
                                                                 {isActiveSession ? 'expand_less' : 'analytics'}
@@ -992,15 +997,17 @@ export default function CandidateManagementPage() {
                                                     <div className="mt-3"><Badge variant={recV as any} className="text-[10px] font-black">{(ev?.hiring_recommendation ?? 'Pending').replace(/_/g, ' ').toUpperCase()}</Badge></div>
                                                 </div>
                                                 <div className="flex-1 grid grid-cols-2 gap-3">
-                                                    {cats.map(cat => { const s = cat.score ?? 0; return (
-                                                        <div key={cat.label} className="bg-white border border-slate-200/80 rounded-xl p-3.5 hover:shadow-sm transition-shadow">
-                                                            <div className="flex items-center justify-between mb-2">
-                                                                <div className="flex items-center gap-1.5"><span className="material-symbols-outlined text-primary text-[14px]">{cat.icon}</span><span className="text-xs font-bold text-slate-700">{cat.label}</span></div>
-                                                                <span className={`text-xs font-black ${getScoreColor(s)}`}>{cat.score != null ? Math.round(cat.score) : '—'}</span>
+                                                    {cats.map(cat => {
+                                                        const s = cat.score ?? 0; return (
+                                                            <div key={cat.label} className="bg-white border border-slate-200/80 rounded-xl p-3.5 hover:shadow-sm transition-shadow">
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <div className="flex items-center gap-1.5"><span className="material-symbols-outlined text-primary text-[14px]">{cat.icon}</span><span className="text-xs font-bold text-slate-700">{cat.label}</span></div>
+                                                                    <span className={`text-xs font-black ${getScoreColor(s)}`}>{cat.score != null ? Math.round(cat.score) : '—'}</span>
+                                                                </div>
+                                                                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full bg-gradient-to-r ${getScoreBarColor(s)} rounded-full`} style={{ width: `${s}%` }} /></div>
                                                             </div>
-                                                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full bg-gradient-to-r ${getScoreBarColor(s)} rounded-full`} style={{ width: `${s}%` }} /></div>
-                                                        </div>
-                                                    ); })}
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
                                             {ev?.ai_summary && (
