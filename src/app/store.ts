@@ -1,14 +1,9 @@
 import { configureStore } from '@reduxjs/toolkit';
-import assessmentReducer from '../features/assessment/slices/assessmentSlice';
-
-import candidateReducer from '../features/candidate/slices/candidateSlice';
+import { rootReducer } from './rootReducer';
 
 export const store = configureStore({
-  reducer: {
-    assessment: assessmentReducer,
-    candidate: candidateReducer,
-  },
+  reducer: rootReducer,
 });
 
-export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
+export type { RootState } from './rootReducer';

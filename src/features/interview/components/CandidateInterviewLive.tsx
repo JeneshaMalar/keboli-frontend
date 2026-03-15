@@ -863,3 +863,66 @@ const CandidateInterviewLive: React.FC = () => {
 };
 
 export default CandidateInterviewLive;
+
+
+
+// import React from 'react';
+// import { useSearchParams } from 'react-router-dom';
+// import { LiveKitRoom } from '@livekit/components-react';
+// import '@livekit/components-styles';
+// import { STYLES } from '../styles/styles';
+// import { useInterviewSession } from '../hooks/useInterviewSession';
+// import { LoadingScreen } from '../components/LoadingScreen';
+// import { InterviewStage } from '../components/InterviewStage';
+
+// const CandidateInterviewLive: React.FC = () => {
+//   const [searchParams] = useSearchParams();
+//   const token = searchParams.get('token') || '';
+  
+//   const {
+//     lkToken,
+//     lkUrl,
+//     validating,
+//     error,
+//     alreadyCompleted,
+//     connected,
+//     sessionId,
+//     invitation,
+//     connect,
+//     disconnect
+//   } = useInterviewSession(token);
+
+//   if (!connected || !lkToken) {
+//     return (
+//       <LoadingScreen 
+//         validating={validating} 
+//         error={error} 
+//         alreadyCompleted={alreadyCompleted} 
+//         onRetry={connect} 
+//       />
+//     );
+//   }
+
+//   return (
+//     <div className="min-h-screen canvas-bg">
+//       <style>{STYLES}</style>
+//       <LiveKitRoom 
+//         serverUrl={lkUrl} 
+//         token={lkToken} 
+//         connect 
+//         audio 
+//         video 
+//         onDisconnected={disconnect} 
+//         className="w-full"
+//       >
+//         <InterviewStage 
+//           onDisconnect={disconnect} 
+//           sessionId={sessionId} 
+//           invitation={invitation} 
+//         />
+//       </LiveKitRoom>
+//     </div>
+//   );
+// };
+
+// export default CandidateInterviewLive;
