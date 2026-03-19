@@ -103,11 +103,9 @@ const STYLES = `
   }
 `;
 
-/* ── Utilities ────────────────────────────────────────────────────────────── */
 const fmt = (s: number) =>
   `${Math.floor((s % 3600) / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 
-/* ── Wave bars ────────────────────────────────────────────────────────────── */
 const WaveBars = ({ active, color }: { active: boolean; color: string }) => {
   const anims = ['wave-a', 'wave-c', 'wave-b', 'wave-a', 'wave-c'];
   const delays = [0, .1, .2, .1, 0];
@@ -123,25 +121,21 @@ const WaveBars = ({ active, color }: { active: boolean; color: string }) => {
   );
 };
 
-/* ── Arc Timer ────────────────────────────────────────────────────────────── */
 const Timer = ({
   durationMinutes, onTimeUp, syncedSecs,
 }: {
   durationMinutes: number;
   onTimeUp: () => void;
-  /** When provided, overrides internal counter (server-authoritative remaining seconds) */
   syncedSecs?: number;
 }) => {
   const [secs, setSecs] = useState(durationMinutes * 60);
 
-  // Sync from server whenever syncedSecs changes
   useEffect(() => {
     if (syncedSecs !== undefined) {
       setSecs(syncedSecs);
     }
   }, [syncedSecs]);
 
-  // Local 1-second countdown (runs between server syncs for smooth display)
   useEffect(() => {
     if (secs <= 0) { onTimeUp(); return; }
     const t = setInterval(() => setSecs(p => p - 1), 1000);
@@ -176,12 +170,10 @@ const Timer = ({
   );
 };
 
-/* ── Chat Message ─────────────────────────────────────────────────────────── */
 const Msg = ({ side, text, isTyping }: { side: 'ai' | 'you'; text: string; isTyping?: boolean }) => {
   const isAI = side === 'ai';
   return (
     <div className={`msg-in flex items-end gap-2 ${isAI ? '' : 'flex-row-reverse'}`}>
-      {/* Label chip */}
       <span className="mono text-[9px] font-medium shrink-0 mb-1 px-2 py-[3px] rounded-md border"
         style={isAI
           ? { color: 'var(--violet)', background: 'var(--violet-l)', borderColor: '#d4cafd' }
@@ -189,7 +181,6 @@ const Msg = ({ side, text, isTyping }: { side: 'ai' | 'you'; text: string; isTyp
         {isAI ? 'AI' : 'YOU'}
       </span>
 
-      {/* Bubble */}
       <div className="max-w-[84%] px-4 py-3 rounded-2xl text-[13px] leading-relaxed shadow-sm"
         style={isAI
           ? { background: 'var(--paper)', border: '1px solid var(--border)', color: 'var(--ink-2)', borderRadius: '18px 18px 18px 4px' }
@@ -207,7 +198,6 @@ const Msg = ({ side, text, isTyping }: { side: 'ai' | 'you'; text: string; isTyp
   );
 };
 
-/* ── Transcript Panel ─────────────────────────────────────────────────────── */
 const TranscriptPanel = ({
   label, dotColor, messages, showTyping, typingRole, hint,
 }: {
@@ -222,7 +212,6 @@ const TranscriptPanel = ({
     <div className="flex flex-col rounded-2xl overflow-hidden card-hover"
       style={{ background: 'var(--paper)', border: '1px solid var(--border)', boxShadow: 'var(--shadow)' }}>
 
-      {/* Header */}
       <div className="flex items-center justify-between px-5 py-3.5 shrink-0"
         style={{ borderBottom: '1px solid var(--border)', background: 'var(--canvas)' }}>
         <div className="flex items-center gap-2.5">
@@ -232,7 +221,6 @@ const TranscriptPanel = ({
         <span className="mono text-[10px]" style={{ color: 'var(--ink-4)' }}>{messages.length} lines</span>
       </div>
 
-      {/* Messages */}
       <div className="thin-scroll overflow-y-auto px-5 py-4 space-y-3" style={{ height: '200px' }}>
         {messages.length === 0 && !showTyping
           ? <div className="h-full flex flex-col items-center justify-center gap-2 opacity-40">
@@ -250,7 +238,6 @@ const TranscriptPanel = ({
   );
 };
 
-/* ── Video Card ───────────────────────────────────────────────────────────── */
 const VideoCard = ({
   children, isActive, activeColor, ringClass,
 }: {
@@ -272,7 +259,6 @@ const VideoCard = ({
   </div>
 );
 
-/* ── Interview Stage ──────────────────────────────────────────────────────── */
 const InterviewStage: React.FC<{
   onDisconnect: () => void;
   sessionId: string | null;
@@ -284,7 +270,6 @@ const InterviewStage: React.FC<{
   const [timeUp, setTimeUp] = useState(false);
   const [buffer, setBuffer] = useState(120);
   const [dbTx, setDbTx] = useState<any[]>([]);
-  /** Server-authoritative remaining seconds, synced from timer_sync messages */
   const [serverRemainingSeconds, setServerRemainingSeconds] = useState<number | undefined>(undefined);
 
   const speaking = va.state === 'speaking';
@@ -313,32 +298,27 @@ const InterviewStage: React.FC<{
     return () => clearInterval(id);
   }, [sessionId, online]);
 
-  // ── Listen for interview_ended / timer_sync data messages from backend ──
   const interviewEndedRef = useRef(false);
   useEffect(() => {
     if (!room || !online) return;
 
     const handleDataReceived = (payload: Uint8Array, _participant: any, _kind: any, topic?: string) => {
-      // Only process messages on the interview_control topic
       if (topic !== 'interview_control') return;
 
       try {
         const data = JSON.parse(new TextDecoder().decode(payload));
 
-        // ── Timer sync: keep frontend timer in lock-step with agent clock ──
         if (data.type === 'timer_sync' && typeof data.remaining_seconds === 'number') {
           setServerRemainingSeconds(data.remaining_seconds);
           return;
         }
 
-        // ── Interview ended signal ──
         if (data.type === 'interview_ended' && data.auto_submit) {
-          if (interviewEndedRef.current) return; // Already handled
+          if (interviewEndedRef.current) return; 
           interviewEndedRef.current = true;
           console.log(`[Interview] Received interview_ended signal (reason=${data.reason}). Auto-submitting in 3s...`);
-          // Brief delay so candidate can see/hear the closing message
           setTimeout(() => {
-            if (!interviewEndedRef.current) return; // Double check
+            if (!interviewEndedRef.current) return; 
             onDisconnect();
           }, 3000);
         }
@@ -351,11 +331,10 @@ const InterviewStage: React.FC<{
     return () => { room.off(RoomEvent.DataReceived, handleDataReceived); };
   }, [room, online, onDisconnect]);
 
-  // ── Fallback: poll session status in case LiveKit data message is missed ──
   useEffect(() => {
     if (!sessionId || !online) return;
     const id = setInterval(async () => {
-      if (interviewEndedRef.current) return; // Already handled
+      if (interviewEndedRef.current) return; 
       try {
         const res = await api.get(`/livekit/session/${sessionId}/status`);
         if (res.data?.is_completed) {
@@ -376,7 +355,6 @@ const InterviewStage: React.FC<{
   const localTrack = localTracks[0] as any;
   const segs = (useTranscriptions() ?? []) as any[];
 
-  // Build message arrays
   const aiMsgs: { id: string; side: 'ai'; text: string }[] = dbTx
     .filter(t => t.role?.toLowerCase() === 'interviewer')
     .map((t, i) => ({ id: `ai${i}`, side: 'ai', text: t.content || t.text || '' }));
@@ -397,23 +375,18 @@ const InterviewStage: React.FC<{
     <>
       <style>{STYLES}</style>
 
-      {/* ── BACKGROUND ─────────────────────────────────────────────────────── */}
       <div className="fixed inset-0 canvas-bg -z-10" />
 
-      {/* Decorative blobs — very subtle */}
       <div className="fixed top-[-20%] right-[-10%] w-[480px] h-[480px] rounded-full -z-10 pointer-events-none"
         style={{ background: 'radial-gradient(circle, rgba(91,60,245,.06) 0%, transparent 70%)' }} />
       <div className="fixed bottom-[-15%] left-[-8%] w-[400px] h-[400px] rounded-full -z-10 pointer-events-none"
         style={{ background: 'radial-gradient(circle, rgba(14,168,160,.05) 0%, transparent 70%)' }} />
 
-      {/* ── TOPBAR ─────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 fade-up"
         style={{ background: 'rgba(247,246,242,.88)', backdropFilter: 'blur(20px)', borderBottom: '1px solid var(--border)' }}>
         <div className="max-w-6xl mx-auto px-8 h-[64px] flex items-center justify-between gap-6">
 
-          {/* Logo + title */}
           <div className="flex items-center gap-4 shrink-0">
-            {/* Geometric mark */}
             <div className="relative size-9 shrink-0">
               <div className="absolute inset-0 rounded-xl rotate-6" style={{ background: 'var(--violet-l)' }} />
               <div className="absolute inset-0 rounded-xl flex items-center justify-center" style={{ background: 'var(--violet)' }}>
@@ -428,14 +401,11 @@ const InterviewStage: React.FC<{
             </div>
           </div>
 
-          {/* Center strip */}
           <div className="flex items-center gap-5">
             <Timer durationMinutes={duration} onTimeUp={() => setTimeUp(true)} syncedSecs={serverRemainingSeconds} />
 
-            {/* Vertical rule */}
             <div className="h-8 w-px" style={{ background: 'var(--border)' }} />
 
-            {/* Live status badge */}
             <div className="flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-bold transition-all duration-300"
               style={speaking
                 ? { background: 'var(--violet-l)', color: 'var(--violet)', border: '1px solid #c4b5fd' }
@@ -447,14 +417,12 @@ const InterviewStage: React.FC<{
               {speaking ? 'AI Speaking' : listening ? 'Listening…' : 'Standby'}
             </div>
 
-            {/* REC chip */}
             <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest"
               style={{ background: '#fff1f2', color: 'var(--rose)', border: '1px solid #fecdd3' }}>
               <span className="size-1.5 rounded-full blink" style={{ background: 'var(--rose)' }} />
               REC
             </div>
 
-            {/* Auto-submit */}
             {timeUp && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] font-black"
                 style={{ background: '#fff8ed', color: 'var(--amber)', border: '1px solid #fed7aa' }}>
@@ -464,16 +432,13 @@ const InterviewStage: React.FC<{
             )}
           </div>
 
-          {/* Right */}
           <div className="flex items-center gap-3 shrink-0">
-            {/* Session ID */}
             <div className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-xl"
               style={{ background: 'var(--canvas)', border: '1px solid var(--border)' }}>
               <span className={`size-1.5 rounded-full ${online ? '' : ''}`}
                 style={{ background: online ? 'var(--teal)' : 'var(--rose)' }} />
               <span className="mono text-[9px]" style={{ color: 'var(--ink-3)' }}>{sessionId?.slice(0, 12) ?? '—'}</span>
             </div>
-            {/* Submit CTA */}
             <button onClick={() => setConfirm(true)}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-black uppercase tracking-wider transition-all active:scale-[.97]"
               style={{
@@ -489,10 +454,8 @@ const InterviewStage: React.FC<{
         </div>
       </header>
 
-      {/* ── MAIN CONTENT ───────────────────────────────────────────────────── */}
       <main className="max-w-6xl mx-auto px-8 pt-8 pb-12">
 
-        {/* Section divider heading */}
         <div className="flex items-center gap-4 mb-7 fade-up delay-1">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[.18em] mb-0.5" style={{ color: 'var(--ink-3)' }}>Live Interview</p>
@@ -506,13 +469,10 @@ const InterviewStage: React.FC<{
           </div>
         </div>
 
-        {/* Two columns */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 fade-up delay-2">
 
-          {/* ════ INTERVIEWER COLUMN ════════════════════════════════════════ */}
           <div className="flex flex-col gap-5">
 
-            {/* Column header */}
             <div className="flex items-center gap-3">
               <div className="size-8 rounded-xl flex items-center justify-center"
                 style={{ background: 'var(--violet)', boxShadow: '0 3px 10px rgba(91,60,245,.3)' }}>
@@ -530,12 +490,10 @@ const InterviewStage: React.FC<{
               </div>
             </div>
 
-            {/* AI video card */}
             <VideoCard isActive={speaking} activeColor="var(--violet)" ringClass="ring-violet">
               {agentTrack
                 ? <VideoTrack trackRef={agentTrack} className="absolute inset-0 w-full h-full object-cover" />
                 : (
-                  /* Refined placeholder */
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-7"
                     style={{
                       background: speaking
@@ -543,7 +501,6 @@ const InterviewStage: React.FC<{
                         : 'linear-gradient(160deg, var(--canvas) 0%, var(--paper) 100%)'
                     }}>
 
-                    {/* Concentric rings */}
                     <div className="relative flex items-center justify-center">
                       {speaking && <>
                         <div className="absolute size-56 rounded-full opacity-20 animate-ping"
@@ -554,7 +511,6 @@ const InterviewStage: React.FC<{
                       <div className="absolute size-36 rounded-full opacity-10"
                         style={{ border: '1px solid var(--violet)' }} />
 
-                      {/* Avatar circle */}
                       <div className="relative size-[88px] rounded-full p-[2.5px] transition-all duration-700"
                         style={{
                           background: speaking
@@ -570,12 +526,10 @@ const InterviewStage: React.FC<{
                       </div>
                     </div>
 
-                    {/* BarVisualizer */}
                     <div className="w-36">
                       <BarVisualizer state={va.state} barCount={14} trackRef={va.audioTrack} className="h-7 w-full" />
                     </div>
 
-                    {/* State chip */}
                     <div className="px-4 py-2 rounded-xl text-[11px] font-bold transition-all duration-400"
                       style={speaking
                         ? { background: 'var(--violet-l)', color: 'var(--violet)', border: '1px solid #c4b5fd' }
@@ -585,7 +539,6 @@ const InterviewStage: React.FC<{
                   </div>
                 )}
 
-              {/* Card footer badge */}
               <div className="absolute bottom-4 left-4">
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
                   style={{ background: 'rgba(255,255,255,.92)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 1px 6px rgba(0,0,0,.08)' }}>
@@ -597,7 +550,6 @@ const InterviewStage: React.FC<{
               </div>
             </VideoCard>
 
-            {/* AI Transcript */}
             <TranscriptPanel
               label="Interviewer Transcript"
               dotColor="var(--violet)"
@@ -608,10 +560,8 @@ const InterviewStage: React.FC<{
             />
           </div>
 
-          {/* ════ CANDIDATE COLUMN ══════════════════════════════════════════ */}
           <div className="flex flex-col gap-5">
 
-            {/* Column header */}
             <div className="flex items-center gap-3">
               <div className="size-8 rounded-xl flex items-center justify-center"
                 style={{ background: 'var(--teal)', boxShadow: '0 3px 10px rgba(14,168,160,.3)' }}>
@@ -629,7 +579,6 @@ const InterviewStage: React.FC<{
               </div>
             </div>
 
-            {/* Candidate video card */}
             <VideoCard isActive={listening} activeColor="var(--teal)" ringClass="ring-teal">
               {localTrack
                 ? <VideoTrack trackRef={localTrack} className="absolute inset-0 w-full h-full object-cover mirror" />
@@ -644,7 +593,6 @@ const InterviewStage: React.FC<{
                   </div>
                 )}
 
-              {/* Mic badge — top right */}
               <div className="absolute top-4 right-4">
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all duration-300"
                   style={listening
@@ -657,7 +605,6 @@ const InterviewStage: React.FC<{
                 </div>
               </div>
 
-              {/* Card footer badge */}
               <div className="absolute bottom-4 left-4">
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
                   style={{ background: 'rgba(255,255,255,.92)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,.8)', boxShadow: '0 1px 6px rgba(0,0,0,.08)' }}>
@@ -669,7 +616,6 @@ const InterviewStage: React.FC<{
               </div>
             </VideoCard>
 
-            {/* Candidate Transcript */}
             <TranscriptPanel
               label="Your Responses"
               dotColor="var(--teal)"
@@ -681,7 +627,6 @@ const InterviewStage: React.FC<{
           </div>
         </div>
 
-        {/* Footer tip */}
         <div className="mt-8 flex items-center justify-center gap-2 fade-up delay-3">
           <div className="h-px w-12" style={{ background: 'var(--border)' }} />
           <p className="text-[11px] font-medium" style={{ color: 'var(--ink-4)' }}>
@@ -691,7 +636,6 @@ const InterviewStage: React.FC<{
         </div>
       </main>
 
-      {/* ── MODAL ──────────────────────────────────────────────────────────── */}
       <Modal
         isOpen={confirm}
         onClose={() => setConfirm(false)}
@@ -734,19 +678,16 @@ const InterviewStage: React.FC<{
   );
 };
 
-/* ── Loading / error screen ───────────────────────────────────────────────── */
 const LoadingScreen = ({ validating, error, alreadyCompleted, onRetry }: { validating: boolean; error: string | null; alreadyCompleted?: boolean; onRetry: () => void }) => (
   <div className="min-h-screen canvas-bg flex items-center justify-center p-6">
     <style>{STYLES}</style>
 
-    {/* Blobs */}
     <div className="fixed top-0 right-0 w-[500px] h-[500px] rounded-full pointer-events-none -z-10"
       style={{ background: 'radial-gradient(circle, rgba(91,60,245,.05) 0%, transparent 70%)' }} />
     <div className="fixed bottom-0 left-0 w-[400px] h-[400px] rounded-full pointer-events-none -z-10"
       style={{ background: 'radial-gradient(circle, rgba(14,168,160,.05) 0%, transparent 70%)' }} />
 
     <div className="fade-up w-full max-w-[360px] text-center space-y-8">
-      {/* Mark */}
       <div className="flex justify-center">
         <div className="relative size-20">
           <div className="absolute inset-0 rounded-2xl rotate-6 opacity-50" style={{ background: 'var(--violet-l)' }} />
@@ -802,7 +743,6 @@ const LoadingScreen = ({ validating, error, alreadyCompleted, onRetry }: { valid
   </div>
 );
 
-/* ── Root ─────────────────────────────────────────────────────────────────── */
 const CandidateInterviewLive: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
