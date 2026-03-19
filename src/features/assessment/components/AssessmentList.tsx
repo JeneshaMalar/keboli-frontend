@@ -13,6 +13,9 @@ interface AssessmentListProps {
   onDelete: (id: string) => void;
 }
 
+function isHtmlContent(str: string): boolean {
+  return /<[a-z][\s\S]*>/i.test(str);
+}
 
 function parseJobDescription(jd: string): Array<{ heading?: string; items: string[] }> {
   if (!jd) return [];
@@ -106,7 +109,38 @@ function getSkillDescription(skill: Record<string, unknown>): string {
 }
 
 
+
 function JobDescriptionViewer({ text }: { text: string }) {
+  if (!text) return null;
+
+  // ── HTML path (new rich-editor content) ──────────────────────────────────
+  if (isHtmlContent(text)) {
+    return (
+      <>
+        <div
+          className="jd-viewer bg-slate-50/80 border border-slate-100 rounded-xl px-5 py-4 max-h-72 overflow-y-auto custom-scrollbar text-sm text-slate-700 leading-relaxed"
+          dangerouslySetInnerHTML={{ __html: text }}
+        />
+        {/* Scoped prose styles matching the editor */}
+        <style>{`
+          .jd-viewer h2 { font-size: 1.05em; font-weight: 700; margin: 0.6em 0 0.25em; color: #1e293b; }
+          .jd-viewer h3 { font-size: 1em; font-weight: 600; margin: 0.5em 0 0.2em; color: #1e293b; }
+          .jd-viewer p  { margin: 0.3em 0; }
+          .jd-viewer ul { list-style: disc; padding-left: 1.4em; margin: 0.3em 0; }
+          .jd-viewer ol { list-style: decimal; padding-left: 1.4em; margin: 0.3em 0; }
+          .jd-viewer li { margin: 0.15em 0; }
+          .jd-viewer b,
+          .jd-viewer strong { font-weight: 700; }
+          .jd-viewer i,
+          .jd-viewer em    { font-style: italic; }
+          .jd-viewer u     { text-decoration: underline; }
+          .jd-viewer s     { text-decoration: line-through; }
+        `}</style>
+      </>
+    );
+  }
+
+  // ── Plain-text path (legacy data) ────────────────────────────────────────
   const sections = parseJobDescription(text);
 
   if (sections.length === 1 && !sections[0].heading) {
@@ -402,6 +436,15 @@ export default function AssessmentList({
     }
   };
 
+  // FIX 1b: Strip HTML for the card preview (line-clamp text, not raw tags)
+  const getPlainTextPreview = (jd: string): string => {
+    if (!jd) return '';
+    if (isHtmlContent(jd)) {
+      return jd.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+    return jd;
+  };
+
   if (assessments.length === 0) {
     return (
       <div className="bg-white border border-slate-200/80 rounded-2xl p-20 text-center shadow-sm">
@@ -444,9 +487,9 @@ export default function AssessmentList({
                 </span>
               </div>
 
-              {/* Description */}
+              {/* FIX 1b: Plain-text preview on the card (no raw HTML tags) */}
               <p className="text-sm text-slate-500 line-clamp-2 mb-5 flex-grow leading-relaxed">
-                {assessment.job_description}
+                {getPlainTextPreview(assessment.job_description)}
               </p>
 
               {/* Stats Row */}
@@ -525,7 +568,7 @@ export default function AssessmentList({
         />
       </div>
 
-      {/* Assessment Details Modal — unchanged */}
+      {/* Assessment Details Modal */}
       <Modal
         isOpen={!!selectedAssessment}
         onClose={() => setSelectedAssessment(null)}

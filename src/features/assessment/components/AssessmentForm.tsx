@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import type { AssessmentCreate, DifficultyLevel } from '../types';
 
 interface AssessmentFormProps {
@@ -45,9 +45,19 @@ const JDEditor: React.FC<{
     (editorRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
     if (node && !initialized.current) {
       node.innerHTML = value || '';
+      // Only lock as initialized once real content is set,
+      // so that async/late-arriving initialData can still populate the editor
+      if (value) initialized.current = true;
+    }
+  }, [value]); // depend on value so it re-runs if content arrives late
+
+  // Sync editor content when value changes externally (e.g. initialData loaded async)
+  useEffect(() => {
+    if (editorRef.current && value && !initialized.current) {
+      editorRef.current.innerHTML = value;
       initialized.current = true;
     }
-  }, []); // eslint-disable-line
+  }, [value]);
 
   const updateActiveFormats = () => {
     const formats = new Set<string>();
@@ -223,7 +233,9 @@ const AssessmentForm: React.FC<AssessmentFormProps> = ({
 }) => {
   const [jdMode, setJdMode] = useState<'text' | 'file'>('text');
   const [jdFile, setJdFile] = useState<File | null>(null);
-  const [richHtml, setRichHtml] = useState<string>('');
+
+  // FIX: Initialize richHtml from initialData so existing JD loads in edit mode
+  const [richHtml, setRichHtml] = useState<string>(initialData?.job_description || '');
 
   const [formData, setFormData] = useState<AssessmentCreate>({
     title: initialData?.title || '',
@@ -235,6 +247,13 @@ const AssessmentForm: React.FC<AssessmentFormProps> = ({
     is_active: initialData?.is_active ?? true,
     skill_graph: initialData?.skill_graph,
   });
+
+  // FIX: Sync richHtml if initialData arrives asynchronously after first render
+  useEffect(() => {
+    if (initialData?.job_description) {
+      setRichHtml(initialData.job_description);
+    }
+  }, [initialData?.job_description]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -309,7 +328,7 @@ const AssessmentForm: React.FC<AssessmentFormProps> = ({
         <div>
           <label className={labelClass}>Job Description</label>
 
-          {/* Tabs: Paste Text | Upload Document — unchanged */}
+          {/* Tabs: Paste Text | Upload Document */}
           <div className="flex gap-2 mb-4">
             <button
               type="button"
@@ -347,7 +366,7 @@ const AssessmentForm: React.FC<AssessmentFormProps> = ({
             </>
           )}
 
-          {/* Upload Document tab — unchanged */}
+          {/* Upload Document tab */}
           {jdMode === 'file' && (
             <div className="relative group">
               <input
