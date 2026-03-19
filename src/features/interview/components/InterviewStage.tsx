@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect,useMemo } from 'react';
 import { useRoomContext, useVoiceAssistant, BarVisualizer, useTracks, useTranscriptions, VideoTrack, RoomAudioRenderer } from '@livekit/components-react';
 import { Track, RoomEvent } from 'livekit-client';
 import Modal from '../../../components/ui/Modal';
@@ -62,7 +62,7 @@ export const InterviewStage: React.FC<InterviewStageProps> = ({ onDisconnect, se
   useEffect(() => {
     if (!room) return;
 
-    const handleDataReceived = (payload: Uint8Array, participant: any, kind: any) => {
+    const handleDataReceived = (payload: Uint8Array, participant: any) => {
       try {
         // Try to parse as transcription data
         const text = new TextDecoder().decode(payload);
