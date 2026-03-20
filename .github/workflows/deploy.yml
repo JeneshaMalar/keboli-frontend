@@ -1,0 +1,56 @@
+name: Deploy Frontend
+on:
+  push:
+    branches: [ dev ]
+env:
+  PROJECT_ID: gwx-internship-01
+  REGION: us-east1
+  REPOSITORY: gwx-gar-intern-01
+
+permissions:
+  id-token: write 
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/717740758627/locations/global/workloadIdentityPools/githubinterns/providers/github-provider
+          service_account: gwx-gh-sa-01@gwx-internship-01.iam.gserviceaccount.com
+          token_format: 'access_token'
+        
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get Backend URL
+        run: |
+          B_URL=$(gcloud run services describe keboli-backend --platform managed --region $REGION --format='value(status.url)')
+          echo "BACKEND_URL=${B_URL}/api" >> $GITHUB_ENV
+
+      - name: Build and Push
+        run: |
+          gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
+          docker build --build-arg VITE_API_URL=${{ env.BACKEND_URL }} \
+            -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/frontend:latest .
+          docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/frontend:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy keboli-frontend \
+            --image $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/frontend:latest \
+            --region $REGION \
+            --allow-unauthenticated \
+            --project=$PROJECT_ID \
+            --platform=managed \
+            --port=80 \
+            --max-instances=2 \
+            --min-instances=0 \
+            --min=0 \
+            --max=2 \
+            --service-account gwx-cloudrun-sa-01@gwx-internship-01.iam.gserviceaccount.com 
