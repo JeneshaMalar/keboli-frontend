@@ -7,6 +7,10 @@ env:
   REGION: us-east1
   REPOSITORY: gwx-gar-intern-01
 
+permissions:
+  id-token: write 
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
